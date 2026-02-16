@@ -1,4 +1,4 @@
-using LongLifeModels.Services;
+using LongLifeModels.Application.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LongLifeModels.Controllers;
@@ -10,7 +10,7 @@ public sealed class AgentBrainController(AgentBrain agentBrain, MemoryService me
     [HttpPost("{agentId:guid}/brain/step")]
     public async Task<ActionResult<AgentBrainResult>> RunBrainStep(Guid agentId, [FromBody] AgentBrainRequest request, CancellationToken cancellationToken)
     {
-        var result = await agentBrain.ThinkAsync(agentId, request.WorldContext, cancellationToken);
+        var result = await agentBrain.ThinkAsync(agentId, request.WorldContext, DateTime.UtcNow);
         return Ok(result);
     }
 
@@ -36,4 +36,4 @@ public sealed class AgentBrainController(AgentBrain agentBrain, MemoryService me
 }
 
 public sealed record AgentBrainRequest(string WorldContext);
-public sealed record StoreMemoryRequest(Guid? RelatedAgentId, string Description, float Importance);
+public sealed record StoreMemoryRequest(Guid? RelatedAgentId, string Description, int Importance);
