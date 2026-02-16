@@ -1,41 +1,67 @@
+using LongLifeModels.Data;
+using LongLifeModels.Infrastructure.LLM;
+using LongLifeModels.Infrastructure.VectorStore;
+using LongLifeModels.Options;
+using LongLifeModels.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using System.Net.Http.Headers;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.Configure<OpenAIOptions>(builder.Configuration.GetSection(OpenAIOptions.SectionName));
+builder.Services.Configure<QdrantOptions>(builder.Configuration.GetSection(QdrantOptions.SectionName));
+builder.Services.Configure<MemoryCompressionOptions>(builder.Configuration.GetSection(MemoryCompressionOptions.SectionName));
+
+builder.Services.AddDbContext<AgentDbContext>(options => options.UseInMemoryDatabase("agent-memory-db"));
+
+builder.Services.AddHttpClient<ILLMService, OpenAIChatService>((sp, client) =>
+{
+    var openAi = sp.GetRequiredService<IOptions<OpenAIOptions>>().Value;
+    client.BaseAddress = new Uri(openAi.BaseUrl);
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+
+builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>((sp, client) =>
+{
+    var openAi = sp.GetRequiredService<IOptions<OpenAIOptions>>().Value;
+    client.BaseAddress = new Uri(openAi.BaseUrl);
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+
+builder.Services.AddHttpClient<QdrantVectorStore>((sp, client) =>
+{
+    var qdrant = sp.GetRequiredService<IOptions<QdrantOptions>>().Value;
+    client.BaseAddress = new Uri(qdrant.BaseUrl);
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    if (!string.IsNullOrWhiteSpace(qdrant.ApiKey))
+    {
+        client.DefaultRequestHeaders.Add("api-key", qdrant.ApiKey);
+    }
+});
+
+builder.Services.AddScoped<IVectorStore>(sp => sp.GetRequiredService<QdrantVectorStore>());
+builder.Services.AddScoped<MemoryService>();
+builder.Services.AddScoped<MemoryCompressor>();
+builder.Services.AddScoped<AgentBrain>();
+
+builder.Services.AddHostedService<QdrantCollectionInitializer>();
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapControllers();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
