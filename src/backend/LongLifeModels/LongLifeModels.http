@@ -1,0 +1,6 @@
+@LongLifeModels_HostAddress = http://localhost:5133
+
+GET {{LongLifeModels_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
