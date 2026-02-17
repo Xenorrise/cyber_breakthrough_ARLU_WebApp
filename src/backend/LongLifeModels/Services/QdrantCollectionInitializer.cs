@@ -6,17 +6,15 @@ public sealed class QdrantCollectionInitializer(IServiceProvider services, ILogg
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        using var scope = services.CreateScope();
-        var vectorStore = scope.ServiceProvider.GetRequiredService<QdrantVectorStore>();
-
         try
         {
+            using var scope = services.CreateScope();
+            var vectorStore = scope.ServiceProvider.GetRequiredService<QdrantVectorStore>();
             await vectorStore.EnsureCollectionExistsAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to initialize Qdrant collection.");
-            throw;
+            logger.LogWarning(ex, "Qdrant is unavailable at startup. Continuing without vector store initialization.");
         }
     }
 

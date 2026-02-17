@@ -11,7 +11,8 @@ public sealed class MemoryService(
     AgentDbContext dbContext,
     IEmbeddingService embeddingService,
     IVectorStore vectorStore,
-    IOptions<QdrantOptions> qdrantOptions)
+    IOptions<QdrantOptions> qdrantOptions,
+    ILogger<MemoryService> logger)
 {
     private readonly string _collection = qdrantOptions.Value.CollectionName;
 
@@ -37,20 +38,27 @@ public sealed class MemoryService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var embedding = await embeddingService.EmbedAsync(memory.Description, cancellationToken);
-        await vectorStore.UpsertAsync(
-            _collection,
-            new VectorRecord(
-                memory.Id.ToString(),
-                embedding,
-                new Dictionary<string, string>
-                {
-                    ["memoryLogId"] = memory.Id.ToString(),
-                    ["agentId"] = memory.AgentId.ToString(),
-                    ["relatedAgentId"] = memory.RelatedAgentId?.ToString() ?? string.Empty,
-                    ["importance"] = memory.Importance.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-                    ["timestamp"] = memory.Timestamp.ToString("O")
-                }),
-            cancellationToken);
+        try
+        {
+            await vectorStore.UpsertAsync(
+                _collection,
+                new VectorRecord(
+                    memory.Id.ToString(),
+                    embedding,
+                    new Dictionary<string, string>
+                    {
+                        ["memoryLogId"] = memory.Id.ToString(),
+                        ["agentId"] = memory.AgentId.ToString(),
+                        ["relatedAgentId"] = memory.RelatedAgentId?.ToString() ?? string.Empty,
+                        ["importance"] = memory.Importance.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                        ["timestamp"] = memory.Timestamp.ToString("O")
+                    }),
+                cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Skipping vector upsert because Qdrant is unavailable.");
+        }
 
         return memory;
     }
@@ -63,7 +71,16 @@ public sealed class MemoryService(
         CancellationToken cancellationToken = default)
     {
         var queryVector = await embeddingService.EmbedAsync(semanticQuery, cancellationToken);
-        var vectorMatches = await vectorStore.SearchAsync(_collection, queryVector, topK * 3, cancellationToken);
+        IReadOnlyList<VectorSearchResult> vectorMatches;
+        try
+        {
+            vectorMatches = await vectorStore.SearchAsync(_collection, queryVector, topK * 3, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Skipping vector recall because Qdrant is unavailable.");
+            return Array.Empty<MemoryLog>();
+        }
 
         var scopedIds = vectorMatches
             .Where(match => match.Payload.TryGetValue("agentId", out var payloadAgentId) && payloadAgentId == agentId.ToString())

@@ -3,6 +3,19 @@ setlocal EnableExtensions
 
 set "PROJECT_ROOT=%~dp0"
 set "COMPOSE_FILE=%PROJECT_ROOT%docker-compose.yml"
+set "ENV_FILE_ARGS="
+
+if exist "%PROJECT_ROOT%.env.local" (
+  set "ENV_FILE_ARGS=--env-file ""%PROJECT_ROOT%.env.local"""
+  echo Using env file: "%PROJECT_ROOT%.env.local"
+) else if exist "%PROJECT_ROOT%.env" (
+  set "ENV_FILE_ARGS=--env-file ""%PROJECT_ROOT%.env"""
+  echo Using env file: "%PROJECT_ROOT%.env"
+)
+
+if "%ENV_FILE_ARGS%"=="" (
+  echo No .env.local/.env found, using defaults from docker-compose.yml
+)
 
 if not exist "%COMPOSE_FILE%" (
   echo docker-compose.yml not found: "%COMPOSE_FILE%"
@@ -61,19 +74,19 @@ if errorlevel 1 (
 
 if /I "%TARGET%"=="back" (
   echo Building backend image...
-  docker compose -f "%COMPOSE_FILE%" build %NO_CACHE% backend
+  docker compose %ENV_FILE_ARGS% -f "%COMPOSE_FILE%" build %NO_CACHE% backend
   exit /b %errorlevel%
 )
 
 if /I "%TARGET%"=="front" (
   echo Building frontend image...
-  docker compose -f "%COMPOSE_FILE%" build %NO_CACHE% frontend
+  docker compose %ENV_FILE_ARGS% -f "%COMPOSE_FILE%" build %NO_CACHE% frontend
   exit /b %errorlevel%
 )
 
 if /I "%TARGET%"=="all" (
   echo Building all images...
-  docker compose -f "%COMPOSE_FILE%" build %NO_CACHE%
+  docker compose %ENV_FILE_ARGS% -f "%COMPOSE_FILE%" build %NO_CACHE%
   exit /b %errorlevel%
 )
 
@@ -87,5 +100,8 @@ echo   build_and_run.bat
 echo   build_and_run.bat rebuild
 echo   build_and_run.bat build ^<back^|front^|all^> [rebuild]
 echo   build_and_run.bat ^<back^|front^|all^> [rebuild]
+echo.
+echo Optional env files (auto-detected near this .bat):
+echo   .env.local (preferred) or .env
 echo.
 exit /b 1

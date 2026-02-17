@@ -11,6 +11,7 @@ public sealed class AgentDbContext(DbContextOptions<AgentDbContext> options) : D
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<AgentMessage> AgentMessages => Set<AgentMessage>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Interaction> Interactions => Set<Interaction>();
     public DbSet<Relationship> Relationships => Set<Relationship>();
@@ -26,11 +27,30 @@ public sealed class AgentDbContext(DbContextOptions<AgentDbContext> options) : D
         modelBuilder.Entity<Agent>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.UserId).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Model).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
             entity.Property(x => x.State).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.LastActiveAt).IsRequired();
+            entity.Property(x => x.ThreadId).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.IsArchived });
+            entity.HasIndex(x => new { x.UserId, x.LastActiveAt });
             entity.Property(x => x.PersonalityTraits)
                 .HasConversion(personalityConverter);
+        });
+
+        modelBuilder.Entity<AgentMessage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.UserId).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Role).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Content).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.CorrelationId).HasMaxLength(120);
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.AgentId, x.CreatedAt });
+            entity.HasIndex(x => x.ThreadId);
         });
 
         modelBuilder.Entity<Conversation>(entity =>

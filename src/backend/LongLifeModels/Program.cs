@@ -1,4 +1,5 @@
 using LongLifeModels.Data;
+using LongLifeModels.Hubs;
 using LongLifeModels.Infrastructure.LLM;
 using LongLifeModels.Infrastructure.VectorStore;
 using LongLifeModels.Options;
@@ -34,7 +35,14 @@ builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>((sp, c
 builder.Services.AddHttpClient<QdrantVectorStore>((sp, client) =>
 {
     var qdrant = sp.GetRequiredService<IOptions<QdrantOptions>>().Value;
-    client.BaseAddress = new Uri(qdrant.BaseUrl);
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("QdrantConfig");
+    var qdrantBaseUrl = ResolveQdrantBaseUrl(qdrant.BaseUrl);
+    if (!string.Equals(qdrantBaseUrl, qdrant.BaseUrl, StringComparison.Ordinal))
+    {
+        logger.LogWarning("Qdrant BaseUrl '{OriginalBaseUrl}' is not reachable from container. Using '{ResolvedBaseUrl}' instead.", qdrant.BaseUrl, qdrantBaseUrl);
+    }
+
+    client.BaseAddress = new Uri(qdrantBaseUrl);
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     if (!string.IsNullOrWhiteSpace(qdrant.ApiKey))
     {
@@ -46,11 +54,31 @@ builder.Services.AddScoped<IVectorStore>(sp => sp.GetRequiredService<QdrantVecto
 builder.Services.AddScoped<MemoryService>();
 builder.Services.AddScoped<MemoryCompressor>();
 builder.Services.AddScoped<AgentBrain>();
+builder.Services.AddScoped<IUserAgentsService, UserAgentsService>();
 builder.Services.AddSingleton<IEventService, InMemoryEventService>();
+builder.Services.AddSingleton<IAgentCommandQueue, InMemoryAgentCommandQueue>();
+builder.Services.AddSingleton<IUserContextService, UserContextService>();
+builder.Services.AddSingleton<IAgentRealtimeNotifier, SignalRAgentRealtimeNotifier>();
 
 builder.Services.AddHostedService<QdrantCollectionInitializer>();
+builder.Services.AddHostedService<AgentCommandWorker>();
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:3000"];
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(
+        "FrontendCors",
+        policy =>
+        {
+            policy
+                .WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        });
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -63,6 +91,47 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("FrontendCors");
 app.MapControllers();
+app.MapHub<AgentsHub>(AgentHubContracts.HubPath);
 
 app.Run();
+
+static string ResolveQdrantBaseUrl(string configuredBaseUrl)
+{
+    if (string.IsNullOrWhiteSpace(configuredBaseUrl))
+    {
+        return configuredBaseUrl;
+    }
+
+    var runningInContainer = string.Equals(
+        Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"),
+        "true",
+        StringComparison.OrdinalIgnoreCase);
+
+    if (!runningInContainer)
+    {
+        return configuredBaseUrl;
+    }
+
+    if (!Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var uri))
+    {
+        return configuredBaseUrl;
+    }
+
+    var isLocalhost = string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+
+    if (!isLocalhost)
+    {
+        return configuredBaseUrl;
+    }
+
+    var builder = new UriBuilder(uri)
+    {
+        Host = "qdrant",
+        Port = 6333
+    };
+
+    return builder.Uri.ToString().TrimEnd('/');
+}
