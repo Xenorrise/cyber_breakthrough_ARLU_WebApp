@@ -21,7 +21,8 @@ builder.Services.AddDbContext<AgentDbContext>(options => options.UseInMemoryData
 builder.Services.AddHttpClient<ILLMService, OpenAIChatService>((sp, client) =>
 {
     var openAi = sp.GetRequiredService<IOptions<OpenAIOptions>>().Value;
-    client.BaseAddress = new Uri(openAi.BaseUrl);
+    var chatBaseUrl = string.IsNullOrWhiteSpace(openAi.ChatBaseUrl) ? openAi.BaseUrl : openAi.ChatBaseUrl;
+    client.BaseAddress = new Uri(chatBaseUrl);
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     client.Timeout = TimeSpan.FromSeconds(60);
 });

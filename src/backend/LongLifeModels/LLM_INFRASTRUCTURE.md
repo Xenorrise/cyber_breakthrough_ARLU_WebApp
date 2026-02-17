@@ -21,8 +21,14 @@
 Для локальной сборки/запуска используйте файл `./.env.local` в корне проекта (файл игнорируется git):
 
 ```env
-OpenAI__ApiKey=your_openai_key
-Qdrant__ApiKey=your_qdrant_key
+OPENAI_API_KEY=your_openai_key
+OPENAI_BASE_URL=https://api.openai.com
+OPENAI_CHAT_BASE_URL=http://192.168.77.11:1234
+OPENAI_CHAT_MODEL=openai/gpt-oss-20b
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+QDRANT_BASE_URL=http://host.docker.internal:6333
+QDRANT_API_KEY=your_qdrant_key
+QDRANT_COLLECTION_NAME=memory_logs
 ```
 
 `build_and_run.bat` автоматически подхватывает эти значения и передаёт их в backend при запуске контейнера.

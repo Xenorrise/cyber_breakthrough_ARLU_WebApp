@@ -85,13 +85,13 @@ public sealed class UserAgentsController(
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            logger.LogWarning(ex, "OpenAI rate limit while generating agent for user {UserId}.", userId);
+            logger.LogWarning(ex, "LLM rate limit while generating agent for user {UserId}.", userId);
             return StatusCode(
                 StatusCodes.Status429TooManyRequests,
                 new ErrorDto
                 {
-                    Code = "openai_rate_limited",
-                    Message = "OpenAI rate limit exceeded. Retry in a few seconds."
+                    Code = "llm_rate_limited",
+                    Message = "LLM rate limit exceeded. Retry in a few seconds."
                 });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)

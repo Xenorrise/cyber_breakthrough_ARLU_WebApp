@@ -17,7 +17,7 @@ Content-Type: application/json
 
 {
   "name": "Researcher",
-  "model": "gpt-4o-mini",
+  "model": "openai/gpt-oss-20b",
   "initialState": "Ready",
   "initialEnergy": 0.8
 }
@@ -30,7 +30,7 @@ Content-Type: application/json
 
 {
   "prompt": "Создай исследовательского агента для анализа мировых событий. Характер: любопытный, спокойный, системный.",
-  "model": "gpt-4o-mini"
+  "model": "openai/gpt-oss-20b"
 }
 
 ###
@@ -52,3 +52,4 @@ X-User-Id: demo-user
 Accept: application/json
 
 ###
+

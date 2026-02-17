@@ -29,7 +29,11 @@ public sealed class OpenAIChatService(HttpClient httpClient, IOptions<OpenAIOpti
                     ]))
             };
 
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            }
+
             using var response = await httpClient.SendAsync(request, cancellationToken);
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxRateLimitRetries)
@@ -47,19 +51,19 @@ public sealed class OpenAIChatService(HttpClient httpClient, IOptions<OpenAIOpti
                     : $" Body: {TrimForMessage(errorBody)}";
 
                 throw new HttpRequestException(
-                    $"OpenAI request failed with status {(int)response.StatusCode} ({response.StatusCode}).{errorSuffix}",
+                    $"LLM request failed with status {(int)response.StatusCode} ({response.StatusCode}).{errorSuffix}",
                     inner: null,
                     statusCode: response.StatusCode);
             }
 
             var payload = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(cancellationToken: cancellationToken)
-                ?? throw new InvalidOperationException("OpenAI chat response was empty.");
+                ?? throw new InvalidOperationException("LLM chat response was empty.");
 
             return payload.Choices.FirstOrDefault()?.Message.Content?.Trim()
-                ?? throw new InvalidOperationException("OpenAI chat response did not contain assistant message.");
+                ?? throw new InvalidOperationException("LLM chat response did not contain assistant message.");
         }
 
-        throw new InvalidOperationException("OpenAI generation did not complete after retry.");
+        throw new InvalidOperationException("LLM generation did not complete after retry.");
     }
 
     private static TimeSpan ResolveRetryDelay(RetryConditionHeaderValue? retryAfter)

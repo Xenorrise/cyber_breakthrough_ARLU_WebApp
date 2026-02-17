@@ -6,6 +6,7 @@ public sealed class OpenAIOptions
 
     public string ApiKey { get; set; } = string.Empty;
     public string BaseUrl { get; set; } = "https://api.openai.com";
-    public string ChatModel { get; set; } = "gpt-4o-mini";
+    public string ChatBaseUrl { get; set; } = string.Empty;
+    public string ChatModel { get; set; } = "openai/gpt-oss-20b";
     public string EmbeddingModel { get; set; } = "text-embedding-3-small";
 }

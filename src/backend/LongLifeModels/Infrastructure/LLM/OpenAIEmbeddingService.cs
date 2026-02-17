@@ -20,7 +20,11 @@ public sealed class OpenAIEmbeddingService(HttpClient httpClient, IOptions<OpenA
             Content = JsonContent.Create(new EmbeddingRequest(_options.EmbeddingModel, text))
         };
 
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+        }
+
         using var response = await httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
