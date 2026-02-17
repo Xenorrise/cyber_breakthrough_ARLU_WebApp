@@ -146,7 +146,12 @@ static string ResolveQdrantBaseUrl(string configuredBaseUrl)
         }
 
         var isQdrantAlias = string.Equals(uri.Host, "qdrant", StringComparison.OrdinalIgnoreCase);
-        if (!isQdrantAlias || CanResolveHost(uri.Host))
+        if (isQdrantAlias)
+        {
+            return configuredBaseUrl;
+        }
+
+        if (CanResolveHost(uri.Host))
         {
             return configuredBaseUrl;
         }
