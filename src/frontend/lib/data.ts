@@ -1,19 +1,22 @@
-/*
- * Типы и моковые данные
-*/
+/**
+ * Слой данных -- типы и моки.
+ * Сейчас захардкожено, при подключении БД замени getAgents(), getEvents() и т.д.
+ * Компоненты трогать не нужно -- зависят только от типов.
+ */
 
+// ===== ТИПЫ =====
 
 export type Mood = "happy" | "neutral" | "sad" | "angry" | "excited" | "anxious"
 
 export interface Agent {
   id: string
   name: string
-  avatar: string        // URL или эмодзи-заглушка
+  avatar: string        // аватар буква/эмо
   mood: Mood
-  traits: string[]      // черты характера
+  traits: string[]      // черты
   description: string
   currentPlan: string
-  memories: string[]    // ключевые воспоминания
+  memories: string[]    // воспоминания
 }
 
 export interface AgentEvent {
@@ -22,7 +25,7 @@ export interface AgentEvent {
   agentName: string
   type: "chat" | "action" | "emotion" | "system"
   text: string
-  timestamp: string     // ISO string
+  timestamp: string     // ISO
 }
 
 export interface Relationship {
@@ -42,7 +45,7 @@ export interface WorldStats {
   moodDistribution: { mood: Mood; count: number }[]
 }
 
-// Цвета настроения
+// ===== НАСТРОЕНИЯ =====
 
 export const MOOD_CONFIG: Record<Mood, { color: string; label: string }> = {
   happy:   { color: "#4ade80", label: "Счастлив" },
@@ -53,7 +56,7 @@ export const MOOD_CONFIG: Record<Mood, { color: string; label: string }> = {
   anxious: { color: "#c084fc", label: "Тревожится" },
 }
 
-// Мок данные
+// ===== МОКСИ =====
 
 export const MOCK_AGENTS: Agent[] = [
   {
@@ -110,6 +113,62 @@ export const MOCK_AGENTS: Agent[] = [
       "Помогла незнакомцу на улице",
       "Заметила напряжение между Виктором и Алексеем",
       "Получила письмо от старого друга",
+    ],
+  },
+  {
+    id: "agent-5",
+    name: "Дмитрий",
+    avatar: "Д",
+    mood: "sad",
+    traits: ["замкнутый", "умный", "меланхоличный"],
+    description: "Бывший учёный, потерял лабораторию в пожаре. Живёт на окраине и избегает людей.",
+    currentPlan: "Попытаться восстановить записи из сгоревшей лаборатории",
+    memories: [
+      "Пожар уничтожил десять лет работы",
+      "Марина однажды принесла еду",
+      "Не доверяет Виктору",
+    ],
+  },
+  {
+    id: "agent-6",
+    name: "Ольга",
+    avatar: "О",
+    mood: "anxious",
+    traits: ["осторожная", "наблюдательная", "скрытная"],
+    description: "Торговка на рынке. Знает все сплетни города, но сама держит много секретов.",
+    currentPlan: "Разузнать, что случилось на площади вчера ночью",
+    memories: [
+      "Видела Виктора в переулке поздно ночью",
+      "Елена покупает у неё травы каждую неделю",
+      "Кто-то следит за ней -- уверена",
+    ],
+  },
+  {
+    id: "agent-7",
+    name: "Игорь",
+    avatar: "И",
+    mood: "neutral",
+    traits: ["спокойный", "справедливый", "старомодный"],
+    description: "Пожилой сторож библиотеки. Видел многое, говорит мало, но когда говорит -- все слушают.",
+    currentPlan: "Присматривать за библиотекой и читать хроники",
+    memories: [
+      "Алексей часто приходит читать",
+      "Помнит, каким был город до войны",
+      "Не одобряет поведение Виктора",
+    ],
+  },
+  {
+    id: "agent-8",
+    name: "Настя",
+    avatar: "Н",
+    mood: "happy",
+    traits: ["жизнерадостная", "наивная", "творческая"],
+    description: "Студентка-музыкант, недавно приехала в город. Ещё не знает местных интриг.",
+    currentPlan: "Найти место для репетиции и познакомиться с людьми",
+    memories: [
+      "Город показался красивым, но странным",
+      "Марина улыбнулась ей на улице",
+      "Услышала громкий спор на площади",
     ],
   },
 ]
@@ -179,15 +238,61 @@ export const MOCK_EVENTS: AgentEvent[] = [
     text: "Решила организовать общий ужин сегодня вечером",
     timestamp: new Date(Date.now() - 5000).toISOString(),
   },
+  {
+    id: "evt-9",
+    agentId: "agent-5",
+    agentName: "Дмитрий",
+    type: "action",
+    text: "Нашёл обгоревший дневник среди руин лаборатории",
+    timestamp: new Date(Date.now() - 280000).toISOString(),
+  },
+  {
+    id: "evt-10",
+    agentId: "agent-6",
+    agentName: "Ольга",
+    type: "emotion",
+    text: "Тревога нарастает -- кто-то определённо следит",
+    timestamp: new Date(Date.now() - 200000).toISOString(),
+  },
+  {
+    id: "evt-11",
+    agentId: "agent-7",
+    agentName: "Игорь",
+    type: "action",
+    text: "Открыл старый архив в подвале библиотеки",
+    timestamp: new Date(Date.now() - 150000).toISOString(),
+  },
+  {
+    id: "evt-12",
+    agentId: "agent-8",
+    agentName: "Настя",
+    type: "chat",
+    text: "Простите, вы не подскажете, где тут можно порепетировать?",
+    timestamp: new Date(Date.now() - 90000).toISOString(),
+  },
 ]
 
 export const MOCK_RELATIONSHIPS: Relationship[] = [
+  // Алексей
   { from: "agent-1", to: "agent-2", sentiment: 0.7, label: "дружба" },
   { from: "agent-1", to: "agent-3", sentiment: -0.4, label: "конфликт" },
-  { from: "agent-1", to: "agent-4", sentiment: 0.5, label: "знакомые" },
-  { from: "agent-2", to: "agent-3", sentiment: -0.2, label: "недоверие" },
-  { from: "agent-2", to: "agent-4", sentiment: 0.3, label: "знакомые" },
-  { from: "agent-3", to: "agent-4", sentiment: -0.1, label: "нейтрально" },
+  { from: "agent-1", to: "agent-7", sentiment: 0.4, label: "уважение" },
+  // Марина
+  { from: "agent-2", to: "agent-5", sentiment: 0.3, label: "сочувствие" },
+  { from: "agent-2", to: "agent-8", sentiment: 0.5, label: "симпатия" },
+  // Виктор
+  { from: "agent-3", to: "agent-4", sentiment: -0.2, label: "раздражение" },
+  { from: "agent-3", to: "agent-7", sentiment: -0.3, label: "неприязнь" },
+  // Елена
+  { from: "agent-4", to: "agent-6", sentiment: 0.4, label: "торговля" },
+  { from: "agent-4", to: "agent-1", sentiment: 0.5, label: "знакомые" },
+  // Ольга
+  { from: "agent-6", to: "agent-3", sentiment: -0.1, label: "подозрение" },
+  // Игорь -- одиночка, мало связей
+  // Настя -- новенькая, только одна связь
+  { from: "agent-8", to: "agent-1", sentiment: 0.2, label: "знакомые" },
+  // Дмитрий -- затворник, почти нет связей
+  { from: "agent-5", to: "agent-7", sentiment: 0.2, label: "соседи" },
 ]
 
 export const MOCK_STATS: WorldStats = {
@@ -203,18 +308,19 @@ export const MOCK_STATS: WorldStats = {
     { type: "system", count: 68 },
   ],
   moodDistribution: [
-    { mood: "happy", count: 3 },
-    { mood: "neutral", count: 4 },
+    { mood: "happy", count: 2 },
+    { mood: "neutral", count: 2 },
     { mood: "sad", count: 1 },
-    { mood: "angry", count: 2 },
-    { mood: "excited", count: 2 },
+    { mood: "angry", count: 1 },
+    { mood: "excited", count: 1 },
     { mood: "anxious", count: 1 },
   ],
 }
 
-// Доступ к данным
+// ===== ДОСТУП К ДАННЫМ (замени на реальные запросы) =====
+
 export async function getAgents(): Promise<Agent[]> {
-  // TODO: заменить на fetch("/api/agents") или SignalR
+  // TODO: fetch("/api/agents") или SignalR
   return MOCK_AGENTS
 }
 
@@ -224,16 +330,16 @@ export async function getAgent(id: string): Promise<Agent | undefined> {
 }
 
 export async function getEvents(): Promise<AgentEvent[]> {
-  // TODO: заменить на fetch("/api/events") или SignalR подписку
+  // TODO: fetch("/api/events") или SignalR подписка
   return MOCK_EVENTS
 }
 
 export async function getRelationships(): Promise<Relationship[]> {
-  // TODO: заменить на fetch("/api/relationships")
+  // TODO: fetch("/api/relationships")
   return MOCK_RELATIONSHIPS
 }
 
 export async function getStats(): Promise<WorldStats> {
-  // TODO: заменить на fetch("/api/stats")
+  // TODO: fetch("/api/stats")
   return MOCK_STATS
 }

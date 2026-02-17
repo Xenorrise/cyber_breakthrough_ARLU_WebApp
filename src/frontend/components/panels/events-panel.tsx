@@ -2,6 +2,7 @@
 
 import { MOCK_AGENTS, MOCK_EVENTS, MOOD_CONFIG, type AgentEvent } from "@/lib/data"
 
+// Типы событий и их стили
 const EVENT_TYPE_LABELS: Record<AgentEvent["type"], { label: string; color: string }> = {
   chat:    { label: "ЧАТ",     color: "#4ade80" },
   action:  { label: "ДЕЙСТВИЕ", color: "#e5c34b" },
@@ -9,6 +10,7 @@ const EVENT_TYPE_LABELS: Record<AgentEvent["type"], { label: string; color: stri
   system:  { label: "СИСТЕМА", color: "#60a5fa" },
 }
 
+// Форматировать время
 function formatTime(iso: string) {
   const d = new Date(iso)
   return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -20,7 +22,7 @@ export function EventsPanel() {
 
   return (
     <div className="flex h-full w-full" style={{ backgroundColor: "var(--cyber-surface)" }}>
-      {/* Left: agent strip */}
+      {/* Слева: список агентов */}
       <aside
         className="shrink-0 flex flex-col gap-3 overflow-y-auto border-r py-4 px-3"
         style={{ borderColor: "rgba(229,195,75,0.15)", width: "clamp(160px, 15%, 220px)" }}
@@ -64,7 +66,7 @@ export function EventsPanel() {
         })}
       </aside>
 
-      {/* Right: event feed */}
+      {/* Справа: лента */}
       <div className="flex-1 flex flex-col min-w-0">
         <div
           className="shrink-0 flex items-center justify-between px-4 py-2 border-b"
@@ -97,7 +99,7 @@ export function EventsPanel() {
                   e.currentTarget.style.backgroundColor = "rgba(229,195,75,0.02)"
                 }}
               >
-                {/* Timestamp */}
+                {/* Время */}
                 <span
                   className="shrink-0 font-mono text-[11px] tabular-nums pt-0.5"
                   style={{ color: "var(--muted-foreground)", width: "64px" }}
@@ -105,7 +107,7 @@ export function EventsPanel() {
                   {formatTime(evt.timestamp)}
                 </span>
 
-                {/* Type badge */}
+                {/* Тип */}
                 <span
                   className="shrink-0 font-mono text-[9px] tracking-wider uppercase px-1.5 py-0.5 rounded-sm mt-0.5"
                   style={{
@@ -117,7 +119,7 @@ export function EventsPanel() {
                   {typeConf.label}
                 </span>
 
-                {/* Content */}
+                {/* Контент */}
                 <div className="flex-1 min-w-0">
                   <span className="font-mono text-xs font-bold mr-2" style={{ color: "var(--cyber-glow)" }}>
                     {evt.agentName}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import {
   MOCK_AGENTS,
   MOCK_EVENTS,
@@ -9,7 +9,15 @@ import {
   type Agent,
 } from "@/lib/data"
 
-function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => void }) {
+function AgentDetail({
+  agent,
+  onBack,
+  fromGraph,
+}: {
+  agent: Agent
+  onBack: () => void
+  fromGraph?: boolean
+}) {
   const mc = MOOD_CONFIG[agent.mood]
   const events = MOCK_EVENTS.filter((e) => e.agentId === agent.id)
   const relations = MOCK_RELATIONSHIPS.filter(
@@ -42,7 +50,7 @@ function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => void }) {
             e.currentTarget.style.borderColor = "rgba(229,195,75,0.25)"
           }}
         >
-          {"<- НАЗАД"}
+          {fromGraph ? "<- К ГРАФУ" : "<- НАЗАД"}
         </button>
         <span className="font-mono text-sm tracking-widest uppercase" style={{ color: "var(--cyber-glow)" }}>
           {"ДОСЬЕ АГЕНТА"}
@@ -181,14 +189,40 @@ function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => void }) {
   )
 }
 
-export function AgentsPanel() {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+export function AgentsPanel({
+  preSelectedAgentId,
+  onClearSelection,
+  fromGraph,
+}: {
+  preSelectedAgentId?: string | null
+  onClearSelection?: () => void
+  fromGraph?: boolean
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(preSelectedAgentId ?? null)
   const agents = MOCK_AGENTS
+
+  // Синхро с внешним выбором (из клика на ноду)
+  const prevPreSelected = useRef(preSelectedAgentId)
+  if (preSelectedAgentId && preSelectedAgentId !== prevPreSelected.current) {
+    prevPreSelected.current = preSelectedAgentId
+    if (selectedId !== preSelectedAgentId) {
+      setSelectedId(preSelectedAgentId)
+    }
+  }
 
   const selected = agents.find((a) => a.id === selectedId)
 
   if (selected) {
-    return <AgentDetail agent={selected} onBack={() => setSelectedId(null)} />
+    return (
+      <AgentDetail
+        agent={selected}
+        onBack={() => {
+          setSelectedId(null)
+          onClearSelection?.()
+        }}
+        fromGraph={fromGraph}
+      />
+    )
   }
 
   return (

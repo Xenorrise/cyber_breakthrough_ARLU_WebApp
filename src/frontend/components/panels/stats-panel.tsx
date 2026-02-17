@@ -1,6 +1,7 @@
 "use client"
 
-import { MOCK_STATS, MOOD_CONFIG } from "@/lib/data"
+import { useState, useEffect } from "react"
+import { MOCK_STATS, MOOD_CONFIG, getStats, type WorldStats } from "@/lib/data"
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -54,7 +55,12 @@ function BarChart({ items, maxVal }: { items: { label: string; value: number; co
 }
 
 export function StatsPanel() {
-  const stats = MOCK_STATS
+  const [stats, setStats] = useState<WorldStats>(MOCK_STATS)
+
+  // Грузим статистику -- при подключении БД заменить getStats()
+  useEffect(() => {
+    getStats().then(setStats)
+  }, [])
 
   const eventTypeColors: Record<string, string> = {
     chat: "#4ade80",
@@ -85,7 +91,7 @@ export function StatsPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
-        {/* Top cards */}
+        {/* Карточки метрик */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Всего событий" value={stats.totalEvents} />
           <StatCard label="Диалогов" value={stats.totalConversations} />
@@ -93,7 +99,7 @@ export function StatsPanel() {
           <StatCard label="Самый активный" value={stats.mostActiveAgent} />
         </div>
 
-        {/* Events by type */}
+        {/* События по типам */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: "var(--muted-foreground)" }}>
             {"СОБЫТИЯ ПО ТИПАМ"}
@@ -108,7 +114,7 @@ export function StatsPanel() {
           />
         </div>
 
-        {/* Mood distribution */}
+        {/* Распределение настроений */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: "var(--muted-foreground)" }}>
             {"РАСПРЕДЕЛЕНИЕ НАСТРОЕНИЙ"}
@@ -123,7 +129,7 @@ export function StatsPanel() {
           />
         </div>
 
-        {/* Top relationship */}
+        {/* Самая сильная связь */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
             {"САМАЯ СИЛЬНАЯ СВЯЗЬ"}

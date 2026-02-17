@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Тема сайта */
+  /* Cyberpunk dark theme - always dark */
   --background: #0a0a0f;
   --foreground: #e0e0e8;
   --card: #111118;
@@ -39,6 +39,7 @@
   --sidebar-border: #2a2a3a;
   --sidebar-ring: #e5c34b;
 
+  /* Custom cyberpunk tokens */
   --cyber-glow: #e5c34b;
   --cyber-glow-dim: rgba(229, 195, 75, 0.3);
   --cyber-cyan: #f5e07a;
@@ -86,7 +87,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/*Анимация хавера*/
+/* Cyberpunk glow animation */
 @keyframes cyber-pulse {
   0%, 100% {
     opacity: 0.6;
@@ -116,7 +117,7 @@
   }
 }
 
-/* Шкала скорости времени */
+/* Custom range slider */
 input[type="range"].cyber-slider {
   -webkit-appearance: none;
   appearance: none;
