@@ -391,7 +391,7 @@ public sealed class WorldSimulationService(
             return $"{actor} и {target} разошлись во взглядах на приоритеты и сроки";
         }
 
-        return $"{actor} и {target} частично согласны, но спорят о деталях";
+        return $"{actor} и {target} уточняют позиции по плану: {ShortenPlan(plan)}";
     }
 
     private static string ShortenPlan(string plan)

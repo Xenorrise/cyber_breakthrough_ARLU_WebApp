@@ -6,6 +6,7 @@ public static class AgentHubContracts
 
     public static class Events
     {
+        public const string EventsUpdated = "events.updated";
         public const string AgentsListUpdated = "agents.list.updated";
         public const string AgentStatusChanged = "agent.status.changed";
         public const string AgentMessage = "agent.message";

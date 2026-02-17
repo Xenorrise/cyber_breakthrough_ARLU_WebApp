@@ -3,8 +3,15 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const geistSans = Geist({
+  subsets: ['latin', 'cyrillic'],
+  variable: '--font-geist-sans',
+})
+
+const geistMono = Geist_Mono({
+  subsets: ['latin', 'cyrillic'],
+  variable: '--font-geist-mono',
+})
 
 export const metadata: Metadata = {
   title: 'LONG LIVE MODELS // God Panel',
@@ -22,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <body className="font-mono antialiased overflow-hidden">
+      <body className={`${geistSans.variable} ${geistMono.variable} font-mono antialiased overflow-hidden`}>
         {children}
         <Analytics />
       </body>

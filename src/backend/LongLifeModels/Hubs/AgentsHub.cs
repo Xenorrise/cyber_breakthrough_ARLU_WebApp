@@ -1,5 +1,6 @@
 using LongLifeModels.DTOs;
 using LongLifeModels.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using System.ComponentModel.DataAnnotations;
 
@@ -130,9 +131,11 @@ public sealed class AgentsHub(
 
     private string ResolveUserId()
     {
+        var httpContext = Context.GetHttpContext();
+        var queryUserId = ReadUserIdFromQuery(httpContext);
         try
         {
-            var headers = Context.GetHttpContext()?.Request.Headers;
+            var headers = httpContext?.Request.Headers;
             if (headers is null)
             {
                 throw new HubException("Connection headers are not available.");
@@ -142,16 +145,22 @@ public sealed class AgentsHub(
         }
         catch (UnauthorizedAccessException ex)
         {
+            if (!string.IsNullOrWhiteSpace(queryUserId))
+            {
+                return queryUserId;
+            }
+
             throw new HubException(ex.Message);
         }
     }
 
     private string? TryResolveUserId()
     {
-        var headers = Context.GetHttpContext()?.Request.Headers;
+        var httpContext = Context.GetHttpContext();
+        var headers = httpContext?.Request.Headers;
         if (headers is null)
         {
-            return null;
+            return ReadUserIdFromQuery(httpContext);
         }
 
         try
@@ -160,8 +169,14 @@ public sealed class AgentsHub(
         }
         catch
         {
-            return null;
+            return ReadUserIdFromQuery(httpContext);
         }
+    }
+
+    private static string? ReadUserIdFromQuery(HttpContext? httpContext)
+    {
+        var raw = httpContext?.Request.Query["userId"].ToString().Trim();
+        return string.IsNullOrWhiteSpace(raw) ? null : raw;
     }
 
     private static void Validate<T>(T dto)

@@ -1,9 +1,13 @@
 using LongLifeModels.Domain;
 using LongLifeModels.DTOs;
+using LongLifeModels.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace LongLifeModels.Services;
 
-public sealed class InMemoryEventService : IEventService
+public sealed class InMemoryEventService(
+    IHubContext<AgentsHub> hubContext,
+    ILogger<InMemoryEventService> logger) : IEventService
 {
     private readonly List<EventModel> _events = [];
     private readonly object _sync = new();
@@ -16,10 +20,11 @@ public sealed class InMemoryEventService : IEventService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var normalizedUserId = string.IsNullOrWhiteSpace(userId) ? null : userId.Trim();
         var model = new EventModel
         {
             Id = Guid.NewGuid(),
-            UserId = string.IsNullOrWhiteSpace(userId) ? null : userId.Trim(),
+            UserId = normalizedUserId,
             Type = request.Type.Trim(),
             Payload = request.Payload.Clone(),
             CreatedAt = createdAt ?? request.OccurredAt ?? DateTimeOffset.UtcNow
@@ -30,7 +35,13 @@ public sealed class InMemoryEventService : IEventService
             _events.Add(model);
         }
 
-        return Task.FromResult(ToDto(model));
+        var dto = ToDto(model);
+        if (!string.IsNullOrWhiteSpace(normalizedUserId))
+        {
+            _ = NotifyEventsUpdatedAsync(normalizedUserId, dto, cancellationToken);
+        }
+
+        return Task.FromResult(dto);
     }
 
     public Task<IReadOnlyCollection<EventDto>> GetAllAsync(string? userId, CancellationToken cancellationToken)
@@ -75,5 +86,27 @@ public sealed class InMemoryEventService : IEventService
             Payload = model.Payload.Clone(),
             CreatedAt = model.CreatedAt
         };
+    }
+
+    private async Task NotifyEventsUpdatedAsync(string userId, EventDto createdEvent, CancellationToken cancellationToken)
+    {
+        var envelope = new RealtimeEnvelopeDto<EventDto>
+        {
+            Type = AgentHubContracts.Events.EventsUpdated,
+            Timestamp = DateTimeOffset.UtcNow,
+            CorrelationId = null,
+            Payload = createdEvent
+        };
+
+        try
+        {
+            await hubContext.Clients
+                .Group(AgentHubContracts.Groups.User(userId))
+                .SendAsync(AgentHubContracts.Events.EventsUpdated, envelope, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to push realtime event update for user {UserId}.", userId);
+        }
     }
 }

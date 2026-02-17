@@ -66,10 +66,10 @@ function AgentDetail({
             e.currentTarget.style.borderColor = "rgba(229,195,75,0.25)"
           }}
         >
-          {fromGraph ? "<- Рљ Р“Р РђР¤РЈ" : "<- РќРђР—РђР”"}
+          {fromGraph ? "<- К ГРАФУ" : "<- НАЗАД"}
         </button>
         <span className="font-mono text-sm tracking-widest uppercase" style={{ color: "var(--cyber-glow)" }}>
-          {"Р”РћРЎР¬Р• РђР“Р•РќРўРђ"}
+          {"ДОСЬЕ АГЕНТА"}
         </span>
         <button
           onClick={() => onDelete(agent.id)}
@@ -121,7 +121,7 @@ function AgentDetail({
         {/* Traits */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"Р§Р•Р РўР« РҐРђР РђРљРўР•Р Рђ"}
+            {"ЧЕРТЫ ХАРАКТЕРА"}
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {agent.traits.map((t) => (
@@ -143,7 +143,7 @@ function AgentDetail({
         {/* Current plan */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"РўР•РљРЈР©РР™ РџР›РђРќ"}
+            {"ТЕКУЩИЙ ПЛАН"}
           </h3>
           <p className="font-mono text-xs" style={{ color: "var(--foreground)", opacity: 0.9 }}>
             {agent.currentPlan}
@@ -153,7 +153,7 @@ function AgentDetail({
         {/* Relationships */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"РћРўРќРћРЁР•РќРРЇ"}
+            {"ОТНОШЕНИЯ"}
           </h3>
           <div className="flex flex-col gap-1.5">
             {relations.map((rel, i) => {
@@ -186,7 +186,7 @@ function AgentDetail({
         {/* Memories */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"Р’РћРЎРџРћРњРРќРђРќРРЇ"}
+            {"ВОСПОМИНАНИЯ"}
           </h3>
           <div className="flex flex-col gap-1">
             {agent.memories.map((m, i) => (
@@ -201,7 +201,7 @@ function AgentDetail({
         {/* Recent events */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"РџРћРЎР›Р•Р”РќРР• РЎРћР‘Р«РўРРЇ"}
+            {"ПОСЛЕДНИЕ СОБЫТИЯ"}
           </h3>
           <div className="flex flex-col gap-1">
             {events.map((evt) => (
@@ -292,7 +292,7 @@ export function AgentsPanel({
     try {
       const created = await generateAgentWithAi(prompt)
       if (!created) {
-        setGenerationError("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ Р°РіРµРЅС‚Р°. РџСЂРѕРІРµСЂСЊ backend Рё OPENAI_API_KEY.")
+        setGenerationError("Не удалось сгенерировать агента. Проверь backend и OPENAI_API_KEY.")
         return
       }
 
@@ -331,7 +331,7 @@ export function AgentsPanel({
     }
   }
 
-  // РЎРёРЅС…СЂРѕ СЃ РІРЅРµС€РЅРёРј РІС‹Р±РѕСЂРѕРј (РёР· РєР»РёРєР° РЅР° РЅРѕРґСѓ)
+  // Синхронизация с внешним выбором (из клика по ноде)
   const prevPreSelected = useRef(preSelectedAgentId)
   if (preSelectedAgentId && preSelectedAgentId !== prevPreSelected.current) {
     prevPreSelected.current = preSelectedAgentId
@@ -364,7 +364,7 @@ export function AgentsPanel({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center font-mono text-xs" style={{ backgroundColor: "var(--cyber-surface)", color: "var(--muted-foreground)" }}>
-        Р—Р°РіСЂСѓР·РєР° Р°РіРµРЅС‚РѕРІ...
+        Загрузка агентов...
       </div>
     )
   }
@@ -376,10 +376,10 @@ export function AgentsPanel({
         style={{ borderColor: "rgba(229,195,75,0.15)" }}
       >
         <span className="font-mono text-sm tracking-widest uppercase" style={{ color: "var(--cyber-glow)" }}>
-          {"РЎРџРРЎРћРљ РђР“Р•РќРўРћР’"}
+          {"СПИСОК АГЕНТОВ"}
         </span>
         <span className="font-mono text-[10px]" style={{ color: "var(--muted-foreground)" }}>
-          {agents.length} {"Р°РіРµРЅС‚РѕРІ"}
+          {agents.length} {"агентов"}
         </span>
       </div>
 
@@ -389,7 +389,7 @@ export function AgentsPanel({
             type="text"
             value={generationPrompt}
             onChange={(e) => setGenerationPrompt(e.target.value)}
-            placeholder="РћРїРёС€Рё Р°РіРµРЅС‚Р° РґР»СЏ РР..."
+            placeholder="Опиши агента для ИИ..."
             className="flex-1 font-mono text-xs px-3 py-2 rounded-sm outline-none"
             style={{
               backgroundColor: "rgba(229,195,75,0.04)",
@@ -408,7 +408,7 @@ export function AgentsPanel({
               border: "1px solid rgba(229,195,75,0.25)",
             }}
           >
-            {generating ? "Р“Р•РќР•Р РђР¦РРЇ..." : "РЎРћР—Р”РђРўР¬ РР"}
+            {generating ? "ГЕНЕРАЦИЯ..." : "СОЗДАТЬ ИИ"}
           </button>
         </div>
         {generationError ? (
@@ -424,7 +424,7 @@ export function AgentsPanel({
             className="col-span-full flex items-center justify-center font-mono text-xs py-8"
             style={{ color: "var(--muted-foreground)" }}
           >
-            РђРіРµРЅС‚РѕРІ РїРѕРєР° РЅРµС‚. РћРїРёС€Рё РїРµСЂРІРѕРіРѕ Рё РЅР°Р¶РјРё "РЎРћР—Р”РђРўР¬ РР".
+            Агентов пока нет. Опиши первого и нажми "СОЗДАТЬ ИИ".
           </div>
         ) : null}
         {agents.map((agent) => {
