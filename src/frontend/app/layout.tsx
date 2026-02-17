@@ -1,16 +1,31 @@
-import "./globals.css";
-import type { Metadata } from "next";
-import { ReactNode } from "react";
+import type { Metadata, Viewport } from 'next'
+import { Geist, Geist_Mono } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/next'
+import './globals.css'
+
+const _geist = Geist({ subsets: ["latin"] });
+const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Events",
-  description: "Event API client"
-};
+  title: 'LONG LIVE MODELS // God Panel',
+  description: 'Наблюдайте и управляйте автономными AI-агентами в реальном времени',
+}
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export const viewport: Viewport = {
+  themeColor: '#0a0a0f',
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body className="font-mono antialiased overflow-hidden">
+        {children}
+        <Analytics />
+      </body>
     </html>
-  );
+  )
 }
