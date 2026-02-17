@@ -1,7 +1,8 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useRef, useState } from "react"
 import {
+  deleteAgent,
   MOOD_CONFIG,
   generateAgentWithAi,
   getAgents,
@@ -19,6 +20,9 @@ function AgentDetail({
   allAgents,
   allEvents,
   allRelationships,
+  onDelete,
+  deleting,
+  deleteError,
 }: {
   agent: Agent
   onBack: () => void
@@ -26,6 +30,9 @@ function AgentDetail({
   allAgents: Agent[]
   allEvents: AgentEvent[]
   allRelationships: Relationship[]
+  onDelete: (agentId: string) => void
+  deleting: boolean
+  deleteError: string | null
 }) {
   const mc = MOOD_CONFIG[agent.mood]
   const events = allEvents.filter((e) => e.agentId === agent.id)
@@ -59,11 +66,25 @@ function AgentDetail({
             e.currentTarget.style.borderColor = "rgba(229,195,75,0.25)"
           }}
         >
-          {fromGraph ? "<- К ГРАФУ" : "<- НАЗАД"}
+          {fromGraph ? "<- Рљ Р“Р РђР¤РЈ" : "<- РќРђР—РђР”"}
         </button>
         <span className="font-mono text-sm tracking-widest uppercase" style={{ color: "var(--cyber-glow)" }}>
-          {"ДОСЬЕ АГЕНТА"}
+          {"Р”РћРЎР¬Р• РђР“Р•РќРўРђ"}
         </span>
+        <button
+          onClick={() => onDelete(agent.id)}
+          disabled={deleting}
+          className="ml-auto font-mono text-xs tracking-wider uppercase cursor-pointer disabled:cursor-not-allowed"
+          style={{
+            color: deleting ? "var(--muted-foreground)" : "#f87171",
+            padding: "4px 10px",
+            border: "1px solid rgba(248,113,113,0.35)",
+            backgroundColor: deleting ? "rgba(248,113,113,0.05)" : "rgba(248,113,113,0.1)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          {deleting ? "УДАЛЕНИЕ..." : "УДАЛИТЬ АГЕНТА"}
+        </button>
       </div>
 
       {/* Content */}
@@ -100,7 +121,7 @@ function AgentDetail({
         {/* Traits */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"ЧЕРТЫ ХАРАКТЕРА"}
+            {"Р§Р•Р РўР« РҐРђР РђРљРўР•Р Рђ"}
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {agent.traits.map((t) => (
@@ -122,7 +143,7 @@ function AgentDetail({
         {/* Current plan */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"ТЕКУЩИЙ ПЛАН"}
+            {"РўР•РљРЈР©РР™ РџР›РђРќ"}
           </h3>
           <p className="font-mono text-xs" style={{ color: "var(--foreground)", opacity: 0.9 }}>
             {agent.currentPlan}
@@ -132,7 +153,7 @@ function AgentDetail({
         {/* Relationships */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"ОТНОШЕНИЯ"}
+            {"РћРўРќРћРЁР•РќРРЇ"}
           </h3>
           <div className="flex flex-col gap-1.5">
             {relations.map((rel, i) => {
@@ -165,7 +186,7 @@ function AgentDetail({
         {/* Memories */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"ВОСПОМИНАНИЯ"}
+            {"Р’РћРЎРџРћРњРРќРђРќРРЇ"}
           </h3>
           <div className="flex flex-col gap-1">
             {agent.memories.map((m, i) => (
@@ -180,7 +201,7 @@ function AgentDetail({
         {/* Recent events */}
         <div>
           <h3 className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: "var(--muted-foreground)" }}>
-            {"ПОСЛЕДНИЕ СОБЫТИЯ"}
+            {"РџРћРЎР›Р•Р”РќРР• РЎРћР‘Р«РўРРЇ"}
           </h3>
           <div className="flex flex-col gap-1">
             {events.map((evt) => (
@@ -193,6 +214,12 @@ function AgentDetail({
             ))}
           </div>
         </div>
+
+        {deleteError ? (
+          <div className="font-mono text-[11px]" style={{ color: "#f87171" }}>
+            {deleteError}
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -217,6 +244,19 @@ export function AgentsPanel({
   const [generationPrompt, setGenerationPrompt] = useState("")
   const [generationError, setGenerationError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const reloadAll = async () => {
+    const [loadedAgents, loadedEvents, loadedRelationships] = await Promise.all([
+      getAgents(),
+      getEvents(),
+      getRelationships(),
+    ])
+    setAgents(loadedAgents)
+    setEvents(loadedEvents)
+    setRelationships(loadedRelationships)
+  }
 
   useEffect(() => {
     let active = true
@@ -252,18 +292,11 @@ export function AgentsPanel({
     try {
       const created = await generateAgentWithAi(prompt)
       if (!created) {
-        setGenerationError("Не удалось сгенерировать агента. Проверь backend и OPENAI_API_KEY.")
+        setGenerationError("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ Р°РіРµРЅС‚Р°. РџСЂРѕРІРµСЂСЊ backend Рё OPENAI_API_KEY.")
         return
       }
 
-      const [loadedAgents, loadedEvents, loadedRelationships] = await Promise.all([
-        getAgents(),
-        getEvents(),
-        getRelationships(),
-      ])
-      setAgents(loadedAgents)
-      setEvents(loadedEvents)
-      setRelationships(loadedRelationships)
+      await reloadAll()
       setGenerationPrompt("")
       setSelectedId(created.id)
     } finally {
@@ -271,7 +304,34 @@ export function AgentsPanel({
     }
   }
 
-  // Синхро с внешним выбором (из клика на ноду)
+  const handleDelete = async (agentId: string) => {
+    if (deleting) {
+      return
+    }
+
+    const agentName = agents.find((agent) => agent.id === agentId)?.name ?? agentId
+    if (!window.confirm(`Удалить агента "${agentName}"?`)) {
+      return
+    }
+
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const removed = await deleteAgent(agentId)
+      if (!removed) {
+        setDeleteError("Не удалось удалить агента. Проверь backend и попробуй снова.")
+        return
+      }
+
+      await reloadAll()
+      setSelectedId(null)
+      onClearSelection?.()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // РЎРёРЅС…СЂРѕ СЃ РІРЅРµС€РЅРёРј РІС‹Р±РѕСЂРѕРј (РёР· РєР»РёРєР° РЅР° РЅРѕРґСѓ)
   const prevPreSelected = useRef(preSelectedAgentId)
   if (preSelectedAgentId && preSelectedAgentId !== prevPreSelected.current) {
     prevPreSelected.current = preSelectedAgentId
@@ -289,6 +349,9 @@ export function AgentsPanel({
         allAgents={agents}
         allEvents={events}
         allRelationships={relationships}
+        onDelete={handleDelete}
+        deleting={deleting}
+        deleteError={deleteError}
         onBack={() => {
           setSelectedId(null)
           onClearSelection?.()
@@ -301,7 +364,7 @@ export function AgentsPanel({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center font-mono text-xs" style={{ backgroundColor: "var(--cyber-surface)", color: "var(--muted-foreground)" }}>
-        Загрузка агентов...
+        Р—Р°РіСЂСѓР·РєР° Р°РіРµРЅС‚РѕРІ...
       </div>
     )
   }
@@ -313,10 +376,10 @@ export function AgentsPanel({
         style={{ borderColor: "rgba(229,195,75,0.15)" }}
       >
         <span className="font-mono text-sm tracking-widest uppercase" style={{ color: "var(--cyber-glow)" }}>
-          {"СПИСОК АГЕНТОВ"}
+          {"РЎРџРРЎРћРљ РђР“Р•РќРўРћР’"}
         </span>
         <span className="font-mono text-[10px]" style={{ color: "var(--muted-foreground)" }}>
-          {agents.length} {"агентов"}
+          {agents.length} {"Р°РіРµРЅС‚РѕРІ"}
         </span>
       </div>
 
@@ -326,7 +389,7 @@ export function AgentsPanel({
             type="text"
             value={generationPrompt}
             onChange={(e) => setGenerationPrompt(e.target.value)}
-            placeholder="Опиши агента для ИИ..."
+            placeholder="РћРїРёС€Рё Р°РіРµРЅС‚Р° РґР»СЏ РР..."
             className="flex-1 font-mono text-xs px-3 py-2 rounded-sm outline-none"
             style={{
               backgroundColor: "rgba(229,195,75,0.04)",
@@ -345,7 +408,7 @@ export function AgentsPanel({
               border: "1px solid rgba(229,195,75,0.25)",
             }}
           >
-            {generating ? "ГЕНЕРАЦИЯ..." : "СОЗДАТЬ ИИ"}
+            {generating ? "Р“Р•РќР•Р РђР¦РРЇ..." : "РЎРћР—Р”РђРўР¬ РР"}
           </button>
         </div>
         {generationError ? (
@@ -361,7 +424,7 @@ export function AgentsPanel({
             className="col-span-full flex items-center justify-center font-mono text-xs py-8"
             style={{ color: "var(--muted-foreground)" }}
           >
-            Агентов пока нет. Опиши первого и нажми "СОЗДАТЬ ИИ".
+            РђРіРµРЅС‚РѕРІ РїРѕРєР° РЅРµС‚. РћРїРёС€Рё РїРµСЂРІРѕРіРѕ Рё РЅР°Р¶РјРё "РЎРћР—Р”РђРўР¬ РР".
           </div>
         ) : null}
         {agents.map((agent) => {

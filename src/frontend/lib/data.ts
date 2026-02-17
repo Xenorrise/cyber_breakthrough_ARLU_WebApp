@@ -705,6 +705,23 @@ export async function generateAgentWithAi(prompt: string, model?: string): Promi
   }
 }
 
+export async function deleteAgent(id: string): Promise<boolean> {
+  const trimmedId = id.trim()
+  if (!trimmedId) {
+    return false
+  }
+
+  try {
+    await backendRequest<unknown>(`/api/user-agents/${encodeURIComponent(trimmedId)}`, {
+      method: "DELETE",
+    })
+    return true
+  } catch (error) {
+    console.warn("[data] deleteAgent failed", error)
+    return false
+  }
+}
+
 export async function getAgents(): Promise<Agent[]> {
   try {
     const agents = await backendRequest<BackendAgentDto[]>("/api/user-agents")

@@ -72,6 +72,32 @@ function buildGraphData(agents: Agent[], rels: Relationship[]): GraphData {
   return { nodes, links }
 }
 
+function mergeGraphData(prev: GraphData, agents: Agent[], rels: Relationship[]): GraphData {
+  const next = buildGraphData(agents, rels)
+  const prevNodesById = new Map(prev.nodes.map((node) => [node.id, node]))
+
+  const mergedNodes = next.nodes.map((node) => {
+    const previous = prevNodesById.get(node.id)
+    if (!previous) {
+      return node
+    }
+
+    return {
+      ...node,
+      x: previous.x,
+      y: previous.y,
+      fx: previous.fx,
+      fy: previous.fy,
+      __dragging: previous.__dragging,
+    }
+  })
+
+  return {
+    nodes: mergedNodes,
+    links: next.links,
+  }
+}
+
 // Загрузочный оверлей
 function LoadingOverlay({ visible }: { visible: boolean }) {
   return (
@@ -161,6 +187,7 @@ export function GraphPanel({
   const [dataLoaded, setDataLoaded] = useState(false)
   const [agents, setAgents] = useState<Agent[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [ForceGraph, setForceGraph] = useState<React.ComponentType<any> | null>(null)
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
@@ -168,8 +195,6 @@ export function GraphPanel({
   const agentsSignatureRef = useRef("")
   const relationshipsSignatureRef = useRef("")
   const initializedRef = useRef(false)
-
-  const graphData = useMemo(() => buildGraphData(agents, relationships), [agents, relationships])
 
   useEffect(() => {
     let active = true
@@ -181,21 +206,26 @@ export function GraphPanel({
       const [loadedAgents, loadedRelationships] = await Promise.all([getAgents(), getRelationships()])
       if (!active) return
 
-      const agentsSignature = JSON.stringify(
-        loadedAgents.map((agent) => [agent.id, agent.mood, agent.currentPlan, agent.memories.length])
-      )
+      const agentsSignature = JSON.stringify(loadedAgents.map((agent) => [agent.id, agent.name, agent.avatar, agent.mood]))
       const relationshipsSignature = JSON.stringify(
         loadedRelationships.map((relationship) => [relationship.from, relationship.to, relationship.sentiment, relationship.label])
       )
 
+      let graphNeedsUpdate = false
       if (agentsSignature !== agentsSignatureRef.current) {
         agentsSignatureRef.current = agentsSignature
         setAgents(loadedAgents)
+        graphNeedsUpdate = true
       }
 
       if (relationshipsSignature !== relationshipsSignatureRef.current) {
         relationshipsSignatureRef.current = relationshipsSignature
         setRelationships(loadedRelationships)
+        graphNeedsUpdate = true
+      }
+
+      if (graphNeedsUpdate) {
+        setGraphData((prev) => mergeGraphData(prev, loadedAgents, loadedRelationships))
       }
 
       if (!initializedRef.current) {

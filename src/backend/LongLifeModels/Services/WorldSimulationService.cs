@@ -9,8 +9,21 @@ namespace LongLifeModels.Services;
 
 public sealed class WorldSimulationService(
     IServiceScopeFactory scopeFactory,
-    IEventService eventService) : IWorldSimulationService
+    IEventService eventService,
+    ILogger<WorldSimulationService> logger) : IWorldSimulationService
 {
+    private const string ReasonSystemPrompt =
+        """
+        Ты пишешь ОДНУ живую причину для социального эпизода в симуляции.
+        Требования:
+        - Язык: русский.
+        - 1 короткое предложение, до 140 символов.
+        - Никаких списков, кавычек, префиксов "Причина:".
+        - Причина должна быть конкретной и человеческой (мотив, страх, цель, триггер).
+        - Не повторяй шаблонные формулировки вроде "пересмотрены приоритеты".
+        Верни только текст причины.
+        """;
+
     private static readonly DateTimeOffset DefaultWorldStart = new(2087, 04, 12, 8, 0, 0, TimeSpan.Zero);
     private static readonly ConcurrentDictionary<string, UserWorldState> States = new(StringComparer.Ordinal);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -219,6 +232,7 @@ public sealed class WorldSimulationService(
 
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+        var llm = scope.ServiceProvider.GetService<ILLMService>();
         var agents = await db.Agents.Where(x => x.UserId == userId && !x.IsArchived).ToListAsync(cancellationToken);
         if (agents.Count == 0)
         {
@@ -239,7 +253,17 @@ public sealed class WorldSimulationService(
             actor.State = BuildPlan(state.Random, actor.Name, target?.Name);
             actor.Energy = Math.Clamp(actor.Energy + (category == "system" ? 0.03f : -0.03f), 0.05f, 1f);
             actor.LastActiveAt = eventTime;
-            var reason = BuildReason(actor.Name, target?.Name, actor.State, category, sentiment);
+            var fallbackReason = BuildReason(actor.Name, target?.Name, actor.State, category, sentiment);
+            var reason = await BuildReasonWithLlmAsync(
+                llm,
+                actor.Name,
+                target?.Name,
+                actor.State,
+                category,
+                sentiment,
+                actor.CurrentEmotion,
+                fallbackReason,
+                cancellationToken);
 
             if (target is not null)
             {
@@ -378,6 +402,76 @@ public sealed class WorldSimulationService(
         }
 
         return plan.Length <= 80 ? plan : $"{plan[..77]}...";
+    }
+
+    private async Task<string> BuildReasonWithLlmAsync(
+        ILLMService? llm,
+        string actor,
+        string? target,
+        string plan,
+        string category,
+        float sentiment,
+        string emotion,
+        string fallbackReason,
+        CancellationToken cancellationToken)
+    {
+        if (llm is null)
+        {
+            return fallbackReason;
+        }
+
+        var targetLabel = string.IsNullOrWhiteSpace(target) ? "нет прямого собеседника" : target;
+        var userPrompt =
+            $"Актор: {actor}.{Environment.NewLine}" +
+            $"Собеседник: {targetLabel}.{Environment.NewLine}" +
+            $"Категория: {category}.{Environment.NewLine}" +
+            $"Текущий план: {plan}.{Environment.NewLine}" +
+            $"Эмоция: {emotion}.{Environment.NewLine}" +
+            $"Тон взаимодействия (sentiment): {sentiment:F2}.{Environment.NewLine}" +
+            "Сгенерируй причину эпизода.";
+
+        try
+        {
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+            var raw = await llm.GenerateAsync(ReasonSystemPrompt, userPrompt, linkedCts.Token);
+            var cleaned = CleanupReason(raw);
+            return string.IsNullOrWhiteSpace(cleaned) ? fallbackReason : cleaned;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogDebug("LLM reason generation timeout, using fallback reason.");
+            return fallbackReason;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "LLM reason generation failed, using fallback reason.");
+            return fallbackReason;
+        }
+    }
+
+    private static string CleanupReason(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Empty;
+        }
+
+        var value = raw.Trim();
+        value = value.Trim('"', '\'', '«', '»');
+
+        if (value.StartsWith("Причина:", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value["Причина:".Length..].Trim();
+        }
+
+        if (value.Length > 140)
+        {
+            value = value[..140].TrimEnd();
+        }
+
+        return value;
     }
 
     private static float PickSentiment(Random random, string category, IReadOnlyDictionary<RelationKey, Relationship> relationships, Agent actor, Agent? target)
