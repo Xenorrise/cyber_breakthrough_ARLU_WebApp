@@ -19,12 +19,16 @@ export default function Home() {
   const [timeSpeed, setTimeSpeed] = useState(1)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [sourceTab, setSourceTab] = useState<TabId | null>(null)
+  const [refreshToken, setRefreshToken] = useState(0)
 
   const handleAddEvent = async (text: string) => {
     const saved = await addEvent(text)
     if (!saved) {
       console.warn("[ui] Event was not sent to backend, fallback mode is active")
+      return
     }
+
+    setRefreshToken((prev) => prev + 1)
   }
 
   // Клик на ноду графа -> открыть досье + запомнить что пришли из графа
@@ -46,14 +50,15 @@ export default function Home() {
   function renderContent() {
     switch (activeTab) {
       case "graph":
-        return <GraphPanel onSelectAgent={handleSelectAgentFromGraph} />
+        return <GraphPanel onSelectAgent={handleSelectAgentFromGraph} refreshToken={refreshToken} />
       case "events":
-        return <EventsPanel />
+        return <EventsPanel refreshToken={refreshToken} />
       case "stats":
-        return <StatsPanel />
+        return <StatsPanel refreshToken={refreshToken} />
       case "agents":
         return (
           <AgentsPanel
+            refreshToken={refreshToken}
             preSelectedAgentId={selectedAgentId}
             onClearSelection={() => {
               setSelectedAgentId(null)

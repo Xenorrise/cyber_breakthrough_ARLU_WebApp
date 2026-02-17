@@ -295,17 +295,7 @@
     "turbopack": {
       "root": "D:\\IvanWork\\ARLU\\Proj1\\cyber_breakthrough_ARLU_WebApp\\src\\frontend"
     },
-    "distDirRoot": ".next",
-    "_originalRewrites": {
-      "beforeFiles": [],
-      "afterFiles": [
-        {
-          "source": "/api/backend/:path*",
-          "destination": "http://localhost:5133/:path*"
-        }
-      ],
-      "fallback": []
-    }
+    "distDirRoot": ".next"
   },
   "appDir": "D:\\IvanWork\\ARLU\\Proj1\\cyber_breakthrough_ARLU_WebApp\\src\\frontend",
   "relativeAppDir": "",

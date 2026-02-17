@@ -146,7 +146,13 @@ function Legend() {
 }
 
 // Панель графа -- узлы, связи, физика
-export function GraphPanel({ onSelectAgent }: { onSelectAgent?: (agentId: string) => void }) {
+export function GraphPanel({
+  onSelectAgent,
+  refreshToken,
+}: {
+  onSelectAgent?: (agentId: string) => void
+  refreshToken?: number
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null)
@@ -164,6 +170,7 @@ export function GraphPanel({ onSelectAgent }: { onSelectAgent?: (agentId: string
 
   useEffect(() => {
     let active = true
+    setDataLoaded(false)
 
     Promise.all([getAgents(), getRelationships()])
       .then(([loadedAgents, loadedRelationships]) => {
@@ -180,7 +187,7 @@ export function GraphPanel({ onSelectAgent }: { onSelectAgent?: (agentId: string
     return () => {
       active = false
     }
-  }, [])
+  }, [refreshToken])
 
   // Track container size
   useEffect(() => {

@@ -54,12 +54,13 @@ function BarChart({ items, maxVal }: { items: { label: string; value: number; co
   )
 }
 
-export function StatsPanel() {
+export function StatsPanel({ refreshToken }: { refreshToken?: number }) {
   const [stats, setStats] = useState<WorldStats | null>(null)
 
   // Грузим статистику -- при подключении БД заменить getStats()
   useEffect(() => {
     let active = true
+    setStats(null)
     getStats().then((loadedStats) => {
       if (active) {
         setStats(loadedStats)
@@ -69,7 +70,7 @@ export function StatsPanel() {
     return () => {
       active = false
     }
-  }, [])
+  }, [refreshToken])
 
   if (!stats) {
     return (

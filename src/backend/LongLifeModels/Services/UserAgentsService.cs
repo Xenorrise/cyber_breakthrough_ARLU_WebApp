@@ -134,6 +134,7 @@ public sealed class UserAgentsService(
         };
 
         dbContext.AgentMessages.Add(userMessage);
+        agent.State = BuildNextState(agent.State, request);
         agent.Status = AgentStatuses.Working;
         agent.LastActiveAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -224,6 +225,26 @@ public sealed class UserAgentsService(
         };
 
         return string.Join(Environment.NewLine, pieces.Where(x => !string.IsNullOrWhiteSpace(x)));
+    }
+
+    private static string BuildNextState(string currentState, CommandAgentRequestDto request)
+    {
+        var message = request.Message?.Trim();
+        var command = request.Command?.Trim();
+        var nextState = !string.IsNullOrWhiteSpace(message)
+            ? message
+            : !string.IsNullOrWhiteSpace(command)
+                ? command
+                : currentState;
+
+        if (string.IsNullOrWhiteSpace(nextState))
+        {
+            return "Updated";
+        }
+
+        return nextState.Length <= 120
+            ? nextState
+            : nextState[..120];
     }
 
     private static AgentDto ToAgentDto(Agent agent)

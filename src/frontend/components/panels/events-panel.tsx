@@ -17,13 +17,14 @@ function formatTime(iso: string) {
   return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 }
 
-export function EventsPanel() {
+export function EventsPanel({ refreshToken }: { refreshToken?: number }) {
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
+    setLoading(true)
 
     Promise.all([getEvents(), getAgents()])
       .then(([loadedEvents, loadedAgents]) => {
@@ -40,7 +41,7 @@ export function EventsPanel() {
     return () => {
       active = false
     }
-  }, [])
+  }, [refreshToken])
 
   return (
     <div className="flex h-full w-full" style={{ backgroundColor: "var(--cyber-surface)" }}>

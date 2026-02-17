@@ -201,10 +201,12 @@ export function AgentsPanel({
   preSelectedAgentId,
   onClearSelection,
   fromGraph,
+  refreshToken,
 }: {
   preSelectedAgentId?: string | null
   onClearSelection?: () => void
   fromGraph?: boolean
+  refreshToken?: number
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(preSelectedAgentId ?? null)
   const [agents, setAgents] = useState<Agent[]>([])
@@ -214,6 +216,7 @@ export function AgentsPanel({
 
   useEffect(() => {
     let active = true
+    setLoading(true)
 
     Promise.all([getAgents(), getEvents(), getRelationships()])
       .then(([loadedAgents, loadedEvents, loadedRelationships]) => {
@@ -231,7 +234,7 @@ export function AgentsPanel({
     return () => {
       active = false
     }
-  }, [])
+  }, [refreshToken])
 
   // Синхро с внешним выбором (из клика на ноду)
   const prevPreSelected = useRef(preSelectedAgentId)
