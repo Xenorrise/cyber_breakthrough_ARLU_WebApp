@@ -1,6 +1,7 @@
 using LongLifeModels.DTOs;
 using LongLifeModels.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Net;
 
 namespace LongLifeModels.Controllers;
 
@@ -69,6 +70,7 @@ public sealed class UserAgentsController(
     [HttpPost("generate")]
     [ProducesResponseType(typeof(AgentDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorDto), StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(ErrorDto), StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<AgentDto>> GenerateWithAi(
         [FromBody] GenerateAgentWithAiRequestDto request,
@@ -80,6 +82,17 @@ public sealed class UserAgentsController(
         {
             var created = await userAgentsService.CreateAgentWithAiAsync(userId, request, cancellationToken);
             return CreatedAtAction(nameof(GetAgent), new { agentId = created.AgentId }, created);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            logger.LogWarning(ex, "OpenAI rate limit while generating agent for user {UserId}.", userId);
+            return StatusCode(
+                StatusCodes.Status429TooManyRequests,
+                new ErrorDto
+                {
+                    Code = "openai_rate_limited",
+                    Message = "OpenAI rate limit exceeded. Retry in a few seconds."
+                });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
