@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 const TABS = [
   { id: "graph", label: "ГРАФ" },
   { id: "events", label: "СОБЫТИЯ" },
-  { id: "log", label: "ЛОГ" },
+  { id: "stats", label: "СТАТИСТИКА" },
   { id: "agents", label: "АГЕНТЫ" },
   { id: "messages", label: "СООБЩЕНИЯ" },
 ] as const
@@ -16,7 +16,7 @@ const DEFAULT_SPEED = 1
 
 export function CyberFrame({
   children,
-  activeTab = "events",
+  activeTab = "graph",
   onTabChange,
   onAddEvent,
   timeSpeed = 1,
@@ -185,7 +185,7 @@ export function CyberFrame({
         <header className="shrink-0 flex flex-col gap-2 pb-[0.6%]">
           {/* Title row */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 pl-[1.5%]">
               <h1
                 className="font-mono text-base md:text-lg lg:text-xl tracking-[0.2em] uppercase whitespace-nowrap"
                 style={{ color: "var(--cyber-glow)" }}
@@ -205,7 +205,7 @@ export function CyberFrame({
 
           {/* Nav row */}
           <div className="flex items-center justify-between">
-            <nav className="flex items-center">
+            <nav className="flex items-center pl-[1.5%]">
               {TABS.map((tab) => {
                 const isActive = activeTab === tab.id
                 return (

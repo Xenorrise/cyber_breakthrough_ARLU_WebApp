@@ -3,25 +3,48 @@
 import { useState } from "react"
 import { CyberFrame, type TabId } from "@/components/cyber-frame"
 import { PlaceholderContent } from "@/components/placeholder-content"
+import { EventsPanel } from "@/components/panels/events-panel"
+import { AgentsPanel } from "@/components/panels/agents-panel"
+import { StatsPanel } from "@/components/panels/stats-panel"
+import { MessagesPanel } from "@/components/panels/messages-panel"
 
 /**
- * Главная страница приложения.
+ * Главная страница.
  *
- * Хранит состояние:
- * - activeTab -- какая вкладка выбрана (ГРАФ / СОБЫТИЯ / ЛОГ / АГЕНТЫ / СООБЩЕНИЯ)
- * - timeSpeed -- текущая скорость времени (от 0 до 5)
+ * activeTab управляет тем, что отображается в основной области:
+ * - graph      -> PlaceholderContent (позже -- react-force-graph)
+ * - events     -> EventsPanel (лента событий + аватары агентов)
+ * - stats      -> StatsPanel (красивая статистика)
+ * - agents     -> AgentsPanel (список агентов + детальный просмотр)
+ * - messages   -> MessagesPanel (заглушка, в разработке)
  *
- * Передаёт всё в CyberFrame, а тот рисует рамку, кнопки, ползунок
- * и поле "ДОБАВИТЬ СОБЫТИЕ".
+ * Все панели используют данные из lib/data.ts.
+ * Когда подключишь бэкенд, замени функции в lib/data.ts -- компоненты не трогай.
  */
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabId>("events")
+  const [activeTab, setActiveTab] = useState<TabId>("graph")
   const [timeSpeed, setTimeSpeed] = useState(1)
 
   const handleAddEvent = (text: string) => {
-    // Пока просто выводим в консоль.
-    // После добавления SignalR будет отправляться на бэкенд.
+    // TODO: отправлять на бэкенд через SignalR / REST
     console.log("[v0] Новое событие:", text)
+  }
+
+  function renderContent() {
+    switch (activeTab) {
+      case "graph":
+        return <PlaceholderContent />
+      case "events":
+        return <EventsPanel />
+      case "stats":
+        return <StatsPanel />
+      case "agents":
+        return <AgentsPanel />
+      case "messages":
+        return <MessagesPanel />
+      default:
+        return <PlaceholderContent />
+    }
   }
 
   return (
@@ -32,7 +55,7 @@ export default function Home() {
       timeSpeed={timeSpeed}
       onTimeSpeedChange={setTimeSpeed}
     >
-      <PlaceholderContent />
+      {renderContent()}
     </CyberFrame>
   )
 }
