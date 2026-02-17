@@ -12,16 +12,20 @@ public sealed class WorldSimulationService(
     IEventService eventService,
     ILogger<WorldSimulationService> logger) : IWorldSimulationService
 {
-    private const string ReasonSystemPrompt =
+    private const string NarrativeSystemPrompt =
         """
-        Ты пишешь ОДНУ живую причину для социального эпизода в симуляции.
+        Ты пишешь живой микронарратив для социального эпизода в симуляции.
         Требования:
         - Язык: русский.
-        - 1 короткое предложение, до 140 символов.
-        - Никаких списков, кавычек, префиксов "Причина:".
+        - Верни JSON-объект с полями:
+          {"reason":"...","eventText":"..."}
+        - reason: 1 короткое предложение, до 140 символов.
+        - eventText: 1 короткое предложение, до 220 символов.
+        - Никаких списков, кавычек-ёлочек, префиксов "Причина:".
         - Причина должна быть конкретной и человеческой (мотив, страх, цель, триггер).
-        - Не повторяй шаблонные формулировки вроде "пересмотрены приоритеты".
-        Верни только текст причины.
+        - eventText должен отражать сцену и звучать естественно, без канцелярита.
+        - Не повторяй одинаковые обороты между эпизодами.
+        Верни только JSON.
         """;
 
     private static readonly DateTimeOffset DefaultWorldStart = new(2087, 04, 12, 8, 0, 0, TimeSpan.Zero);
@@ -253,8 +257,9 @@ public sealed class WorldSimulationService(
             actor.State = BuildPlan(state.Random, actor.Name, target?.Name);
             actor.Energy = Math.Clamp(actor.Energy + (category == "system" ? 0.03f : -0.03f), 0.05f, 1f);
             actor.LastActiveAt = eventTime;
-            var fallbackReason = BuildReason(actor.Name, target?.Name, actor.State, category, sentiment);
-            var reason = await BuildReasonWithLlmAsync(
+            var fallbackReason = BuildReasonFallback(state.Random, actor.Name, target?.Name, actor.State, category, sentiment);
+            var fallbackText = BuildEventTextFallback(actor.Name, target?.Name, actor.State, actor.CurrentEmotion, category, sentiment, fallbackReason);
+            var narrative = await BuildNarrativeWithLlmAsync(
                 llm,
                 actor.Name,
                 target?.Name,
@@ -262,8 +267,12 @@ public sealed class WorldSimulationService(
                 category,
                 sentiment,
                 actor.CurrentEmotion,
+                state.Random.Next(100_000, 999_999),
                 fallbackReason,
+                fallbackText,
                 cancellationToken);
+            var reason = narrative.Reason;
+            var text = narrative.EventText;
 
             if (target is not null)
             {
@@ -288,7 +297,6 @@ public sealed class WorldSimulationService(
                 });
             }
 
-            var text = BuildEventText(actor.Name, target?.Name, actor.State, actor.CurrentEmotion, category, sentiment, reason);
             var payload = JsonSerializer.SerializeToElement(new
             {
                 agentId = actor.Id,
@@ -352,7 +360,7 @@ public sealed class WorldSimulationService(
     private static string SentimentToEmotion(float sentiment) => sentiment >= 0.55f ? "радость" : sentiment >= 0.2f ? "спокойствие" : sentiment > -0.2f ? "напряжение" : sentiment > -0.55f ? "тревога" : "раздражение";
     private static string LabelForScore(float score) => score >= 0.55f ? "дружба" : score >= 0.2f ? "симпатия" : score > -0.2f ? "нейтрально" : score > -0.55f ? "напряжение" : "конфликт";
     private static string BuildPlan(Random random, string actor, string? target) => $"{(random.NextDouble() < 0.5 ? "Днем" : "Вечером")} {actor.ToLowerInvariant()} планирует обсудить приоритеты с {(target ?? "горожанами")}.";
-    private static string BuildEventText(string actor, string? target, string plan, string emotion, string category, float sentiment, string reason) => category == "emotion"
+    private static string BuildEventTextFallback(string actor, string? target, string plan, string emotion, string category, float sentiment, string reason) => category == "emotion"
         ? $"{actor} фиксирует эмоцию: {emotion}. Причина: {reason}"
         : category == "system"
             ? $"{actor} обновляет план: {plan} Причина: {reason}"
@@ -362,37 +370,61 @@ public sealed class WorldSimulationService(
                     ? $"{actor} взаимодействует с {target} и усиливает контакт. Причина: {reason}"
                     : $"{actor} конфликтует с {target}, напряжение растет. Причина: {reason}";
 
-    private static string BuildReason(string actor, string? target, string plan, string category, float sentiment)
+    private static string BuildReasonFallback(Random random, string actor, string? target, string plan, string category, float sentiment)
     {
         if (category == "system")
         {
-            return "пересмотрены приоритеты после оценки текущей обстановки";
+            return PickVariant(random,
+                "сверил свежие сведения и передвинул приоритеты на срочные задачи",
+                "пришло новое наблюдение, и план пришлось быстро перестроить",
+                "обстановка сместилась, поэтому цели на вечер пришлось переформулировать");
         }
 
         if (category == "emotion")
         {
             return sentiment >= 0
-                ? "появились сигналы поддержки и доверия"
-                : "накопилось напряжение после предыдущих контактов";
+                ? PickVariant(random,
+                    "услышал поддержку и почувствовал, что ему снова верят",
+                    "заметил знаки внимания и внутренне успокоился",
+                    "почувствовал теплую реакцию собеседников и выдохнул")
+                : PickVariant(random,
+                    "всплыли старые обиды, и тревога резко усилилась",
+                    "неприятная реплика задела его сильнее, чем он ожидал",
+                    "напряжение от прошлых встреч снова прорвалось наружу");
         }
 
         if (target is null)
         {
-            return "агент работал в одиночку и опирался на собственные выводы";
+            return PickVariant(random,
+                "решил не ждать помощи и сделал ставку на собственные выводы",
+                "выбрал одиночный ход, чтобы не втягивать других в риск",
+                "взял паузу от общения и сосредоточился на личной проверке фактов");
         }
 
         if (sentiment >= 0.35f)
         {
-            return $"у {actor} и {target} совпали цели: {ShortenPlan(plan)}";
+            return PickVariant(random,
+                $"{actor} и {target} быстро нашли общий ритм вокруг плана: {ShortenPlan(plan)}",
+                $"у {actor} и {target} совпала цель, поэтому договорились без лишнего давления",
+                $"обоим важно одно и то же, поэтому разговор пошел в конструктив");
         }
 
         if (sentiment <= -0.35f)
         {
-            return $"{actor} и {target} разошлись во взглядах на приоритеты и сроки";
+            return PickVariant(random,
+                $"{actor} и {target} разошлись в том, что делать сначала и где рисковать",
+                $"{target} настаивал на другом порядке действий, и спор стал жестче",
+                "каждый тянул решение в свою сторону, из-за чего диалог быстро накалился");
         }
 
-        return $"{actor} и {target} уточняют позиции по плану: {ShortenPlan(plan)}";
+        return PickVariant(random,
+            $"{actor} и {target} сверяли детали плана и пытались убрать двусмысленность",
+            "оба слышат друг друга, но по срокам и формулировкам пока не совпадают",
+            "договоренность есть только в общем, а в нюансах им еще нужно сойтись");
     }
+
+    private static string PickVariant(Random random, params string[] variants)
+        => variants[random.Next(variants.Length)];
 
     private static string ShortenPlan(string plan)
     {
@@ -404,7 +436,7 @@ public sealed class WorldSimulationService(
         return plan.Length <= 80 ? plan : $"{plan[..77]}...";
     }
 
-    private async Task<string> BuildReasonWithLlmAsync(
+    private async Task<NarrativeDraft> BuildNarrativeWithLlmAsync(
         ILLMService? llm,
         string actor,
         string? target,
@@ -412,12 +444,14 @@ public sealed class WorldSimulationService(
         string category,
         float sentiment,
         string emotion,
+        int variationSeed,
         string fallbackReason,
+        string fallbackText,
         CancellationToken cancellationToken)
     {
         if (llm is null)
         {
-            return fallbackReason;
+            return new NarrativeDraft(fallbackReason, fallbackText);
         }
 
         var targetLabel = string.IsNullOrWhiteSpace(target) ? "нет прямого собеседника" : target;
@@ -428,26 +462,37 @@ public sealed class WorldSimulationService(
             $"Текущий план: {plan}.{Environment.NewLine}" +
             $"Эмоция: {emotion}.{Environment.NewLine}" +
             $"Тон взаимодействия (sentiment): {sentiment:F2}.{Environment.NewLine}" +
-            "Сгенерируй причину эпизода.";
+            $"Сид вариативности: {variationSeed}.{Environment.NewLine}" +
+            "Сгенерируй reason и eventText.";
 
         try
         {
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            linkedCts.CancelAfter(TimeSpan.FromSeconds(5));
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(12));
 
-            var raw = await llm.GenerateAsync(ReasonSystemPrompt, userPrompt, linkedCts.Token);
+            var raw = await llm.GenerateAsync(NarrativeSystemPrompt, userPrompt, linkedCts.Token);
+            if (TryParseNarrative(raw, out var parsed))
+            {
+                return parsed;
+            }
+
             var cleaned = CleanupReason(raw);
-            return string.IsNullOrWhiteSpace(cleaned) ? fallbackReason : cleaned;
+            if (!string.IsNullOrWhiteSpace(cleaned))
+            {
+                return new NarrativeDraft(cleaned, BuildEventTextFallback(actor, target, plan, emotion, category, sentiment, cleaned));
+            }
+
+            return new NarrativeDraft(fallbackReason, fallbackText);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogDebug("LLM reason generation timeout, using fallback reason.");
-            return fallbackReason;
+            logger.LogDebug("LLM narrative generation timeout, using fallback narrative.");
+            return new NarrativeDraft(fallbackReason, fallbackText);
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "LLM reason generation failed, using fallback reason.");
-            return fallbackReason;
+            logger.LogDebug(ex, "LLM narrative generation failed, using fallback narrative.");
+            return new NarrativeDraft(fallbackReason, fallbackText);
         }
     }
 
@@ -472,6 +517,97 @@ public sealed class WorldSimulationService(
         }
 
         return value;
+    }
+
+    private bool TryParseNarrative(string? raw, out NarrativeDraft narrative)
+    {
+        narrative = default!;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        var content = raw.Trim();
+        var jsonStart = content.IndexOf('{');
+        var jsonEnd = content.LastIndexOf('}');
+        if (jsonStart < 0 || jsonEnd <= jsonStart)
+        {
+            return false;
+        }
+
+        var json = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            var reasonRaw = TryGetStringProperty(doc.RootElement, "reason");
+            var eventTextRaw = TryGetStringProperty(doc.RootElement, "eventText") ?? TryGetStringProperty(doc.RootElement, "event_text");
+            var reason = CleanupReason(reasonRaw);
+            var eventText = CleanupEventText(eventTextRaw);
+            if (string.IsNullOrWhiteSpace(reason) || string.IsNullOrWhiteSpace(eventText))
+            {
+                return false;
+            }
+
+            narrative = new NarrativeDraft(reason, eventText);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string CleanupEventText(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Empty;
+        }
+
+        var value = raw.Trim();
+        value = value.Trim('"', '\'', '«', '»');
+
+        if (value.StartsWith("Событие:", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value["Событие:".Length..].Trim();
+        }
+
+        if (value.Length > 220)
+        {
+            value = value[..220].TrimEnd();
+        }
+
+        return value;
+    }
+
+    private static string? TryGetStringProperty(JsonElement root, string propertyName)
+    {
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (!string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (prop.Value.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var value = prop.Value.GetString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static float PickSentiment(Random random, string category, IReadOnlyDictionary<RelationKey, Relationship> relationships, Agent actor, Agent? target)
@@ -515,6 +651,7 @@ public sealed class WorldSimulationService(
         public SemaphoreSlim Gate { get; } = new(1, 1);
     }
 
+    private readonly record struct NarrativeDraft(string Reason, string EventText);
     private sealed record HeroTemplate(string Name, string Description, string TraitSummary, string Plan, string Emotion, float Energy, PersonalityTraits PersonalityTraits, IReadOnlyCollection<string> Memories);
     private readonly record struct RelationKey(Guid AgentAId, Guid AgentBId);
 }
