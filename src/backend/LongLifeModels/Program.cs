@@ -6,6 +6,7 @@ using LongLifeModels.Options;
 using LongLifeModels.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Net;
 using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -126,7 +127,19 @@ static string ResolveQdrantBaseUrl(string configuredBaseUrl)
 
     if (!isLocalhost)
     {
-        return configuredBaseUrl;
+        var isQdrantAlias = string.Equals(uri.Host, "qdrant", StringComparison.OrdinalIgnoreCase);
+        if (!isQdrantAlias || CanResolveHost(uri.Host))
+        {
+            return configuredBaseUrl;
+        }
+
+        var hostGatewayBuilder = new UriBuilder(uri)
+        {
+            Host = "host.docker.internal",
+            Port = uri.IsDefaultPort ? 6333 : uri.Port
+        };
+
+        return hostGatewayBuilder.Uri.ToString().TrimEnd('/');
     }
 
     var builder = new UriBuilder(uri)
@@ -136,4 +149,17 @@ static string ResolveQdrantBaseUrl(string configuredBaseUrl)
     };
 
     return builder.Uri.ToString().TrimEnd('/');
+}
+
+static bool CanResolveHost(string host)
+{
+    try
+    {
+        _ = Dns.GetHostAddresses(host);
+        return true;
+    }
+    catch
+    {
+        return false;
+    }
 }
