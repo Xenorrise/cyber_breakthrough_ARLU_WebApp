@@ -1,6 +1,6 @@
-"use client"
+﻿"use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 const TABS = [
   { id: "graph", label: "ГРАФ" },
@@ -36,6 +36,15 @@ export function CyberFrame({
   const [eventText, setEventText] = useState("")
   const [speedHover, setSpeedHover] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const lastNonZeroSpeedRef = useRef(DEFAULT_SPEED)
+
+  const isPaused = timeSpeed <= 0.001
+
+  useEffect(() => {
+    if (timeSpeed > 0.001) {
+      lastNonZeroSpeedRef.current = timeSpeed
+    }
+  }, [timeSpeed])
 
   useEffect(() => {
     setMounted(true)
@@ -89,6 +98,19 @@ export function CyberFrame({
       onAddEvent(eventText.trim())
       setEventText("")
     }
+  }
+
+  const handleTogglePause = () => {
+    if (!onTimeSpeedChange) {
+      return
+    }
+
+    if (isPaused) {
+      onTimeSpeedChange(Math.max(lastNonZeroSpeedRef.current, DEFAULT_SPEED))
+      return
+    }
+
+    onTimeSpeedChange(0)
   }
 
   /* percentage-based paddings: 1.2% top/bottom, 1.5% sides -- scales with any screen */
@@ -219,14 +241,31 @@ export function CyberFrame({
               >
                 LONG LIVE MODELS
               </h1>
-              <span
-                className="font-mono text-xs md:text-sm tabular-nums whitespace-nowrap"
-                style={{ color: "var(--cyber-glow)", opacity: 0.5 }}
-              >
-                {date}
-                <span className="mx-1.5" style={{ opacity: 0.4 }}>{"/"}</span>
-                {time}
-              </span>
+              <div className="flex flex-col items-start gap-1">
+                <button
+                  onClick={handleTogglePause}
+                  className="font-mono text-[10px] md:text-xs tracking-wider uppercase cursor-pointer"
+                  style={{
+                    color: isPaused ? "#4ade80" : "#f87171",
+                    border: `1px solid ${isPaused ? "rgba(74,222,128,0.45)" : "rgba(248,113,113,0.45)"}`,
+                    backgroundColor: isPaused ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)",
+                    padding: "2px 8px",
+                    transition: "all 0.2s ease",
+                  }}
+                  title={isPaused ? "Продолжить течение игрового времени" : "Остановить течение игрового времени"}
+                >
+                  {isPaused ? "ПРОДОЛЖИТЬ ВРЕМЯ" : "ОСТАНОВИТЬ ВРЕМЯ"}
+                </button>
+
+                <span
+                  className="font-mono text-xs md:text-sm tabular-nums whitespace-nowrap"
+                  style={{ color: "var(--cyber-glow)", opacity: 0.5 }}
+                >
+                  {date}
+                  <span className="mx-1.5" style={{ opacity: 0.4 }}>{"/"}</span>
+                  {time}
+                </span>
+              </div>
             </div>
           </div>
 

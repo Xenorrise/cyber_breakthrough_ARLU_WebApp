@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState } from "react"
 import { CyberFrame, type TabId } from "@/components/cyber-frame"
@@ -8,12 +8,6 @@ import { AgentsPanel } from "@/components/panels/agents-panel"
 import { StatsPanel } from "@/components/panels/stats-panel"
 import { MessagesPanel } from "@/components/panels/messages-panel"
 import { addEvent, getWorldTime, setWorldTimeSpeed } from "@/lib/data"
-
-/**
- * Главная. activeTab -- активная вкладка.
- * selectedAgentId + sourceTab -- отслеживаем откуда пришел (из графа -> нужен спец возврат).
- * Все данные из lib/data.ts, при подключении БД замени функции там.
- */
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("graph")
   const [timeSpeed, setTimeSpeed] = useState(1)
@@ -31,24 +25,29 @@ export default function Home() {
         return
       }
 
-      setTimeSpeed(current.speed)
-      setWorldTime(current.gameTime)
+      setTimeSpeed((prev) => (Math.abs(prev - current.speed) > 0.001 ? current.speed : prev))
+      setWorldTime((prev) => {
+        if (!prev) {
+          return current.gameTime
+        }
+
+        const prevMs = new Date(prev).getTime()
+        const nextMs = new Date(current.gameTime).getTime()
+        if (!Number.isFinite(prevMs) || !Number.isFinite(nextMs)) {
+          return current.gameTime
+        }
+
+        // Keep UI smooth: resync only if drift exceeds one in-game minute.
+        return Math.abs(nextMs - prevMs) >= 60_000 ? current.gameTime : prev
+      })
     }
 
     void syncWorldTime()
-    const timer = setInterval(syncWorldTime, 1500)
+    const timer = setInterval(syncWorldTime, 5000)
     return () => {
       active = false
       clearInterval(timer)
     }
-  }, [])
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setRefreshToken((prev) => prev + 1)
-    }, 3000)
-
-    return () => clearInterval(timer)
   }, [])
 
   const handleAddEvent = async (text: string) => {
@@ -73,14 +72,12 @@ export default function Home() {
     setRefreshToken((prev) => prev + 1)
   }
 
-  // Клик на ноду графа -> открыть досье + запомнить что пришли из графа
   const handleSelectAgentFromGraph = (agentId: string) => {
     setSelectedAgentId(agentId)
     setSourceTab("graph")
     setActiveTab("agents")
   }
 
-  // Смена вкладки -- сбросить выбор если не на агентах
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab)
     if (tab !== "agents") {
@@ -104,7 +101,6 @@ export default function Home() {
             preSelectedAgentId={selectedAgentId}
             onClearSelection={() => {
               setSelectedAgentId(null)
-              // Если были в графе, вернуться туда
               if (sourceTab === "graph") {
                 setActiveTab("graph")
                 setSourceTab(null)
@@ -133,3 +129,4 @@ export default function Home() {
     </CyberFrame>
   )
 }
+

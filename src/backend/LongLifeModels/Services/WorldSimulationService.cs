@@ -1,4 +1,4 @@
-using LongLifeModels.Data;
+﻿using LongLifeModels.Data;
 using LongLifeModels.Domain;
 using LongLifeModels.DTOs;
 using Microsoft.EntityFrameworkCore;
@@ -239,15 +239,32 @@ public sealed class WorldSimulationService(
             actor.State = BuildPlan(state.Random, actor.Name, target?.Name);
             actor.Energy = Math.Clamp(actor.Energy + (category == "system" ? 0.03f : -0.03f), 0.05f, 1f);
             actor.LastActiveAt = eventTime;
+            var reason = BuildReason(actor.Name, target?.Name, actor.State, category, sentiment);
 
             if (target is not null)
             {
                 var relationship = UpdateRelationship(db, relMap, actor.Id, target.Id, sentiment, eventTime);
-                db.MemoryLogs.Add(new MemoryLog { Id = Guid.NewGuid(), AgentId = actor.Id, RelatedAgentId = target.Id, Description = $"{actor.Name}: {category} -> {target.Name}", Importance = 0.4f + MathF.Abs(sentiment) * 0.4f, Timestamp = eventTime });
-                db.MemoryLogs.Add(new MemoryLog { Id = Guid.NewGuid(), AgentId = target.Id, RelatedAgentId = actor.Id, Description = $"{actor.Name} повлиял на отношение: {LabelForScore(relationship.Score)}", Importance = 0.35f, Timestamp = eventTime });
+                db.MemoryLogs.Add(new MemoryLog
+                {
+                    Id = Guid.NewGuid(),
+                    AgentId = actor.Id,
+                    RelatedAgentId = target.Id,
+                    Description = $"{actor.Name}: {category} -> {target.Name}. Причина: {reason}",
+                    Importance = 0.4f + MathF.Abs(sentiment) * 0.4f,
+                    Timestamp = eventTime
+                });
+                db.MemoryLogs.Add(new MemoryLog
+                {
+                    Id = Guid.NewGuid(),
+                    AgentId = target.Id,
+                    RelatedAgentId = actor.Id,
+                    Description = $"{actor.Name} повлиял на отношение: {LabelForScore(relationship.Score)}. Причина: {reason}",
+                    Importance = 0.35f,
+                    Timestamp = eventTime
+                });
             }
 
-            var text = BuildEventText(actor.Name, target?.Name, actor.State, actor.CurrentEmotion, category, sentiment);
+            var text = BuildEventText(actor.Name, target?.Name, actor.State, actor.CurrentEmotion, category, sentiment, reason);
             var payload = JsonSerializer.SerializeToElement(new
             {
                 agentId = actor.Id,
@@ -261,6 +278,7 @@ public sealed class WorldSimulationService(
                 category,
                 emotion = actor.CurrentEmotion,
                 currentPlan = actor.State,
+                reason,
                 gameTime = eventTime.ToString("O")
             }, JsonOptions);
 
@@ -310,7 +328,57 @@ public sealed class WorldSimulationService(
     private static string SentimentToEmotion(float sentiment) => sentiment >= 0.55f ? "радость" : sentiment >= 0.2f ? "спокойствие" : sentiment > -0.2f ? "напряжение" : sentiment > -0.55f ? "тревога" : "раздражение";
     private static string LabelForScore(float score) => score >= 0.55f ? "дружба" : score >= 0.2f ? "симпатия" : score > -0.2f ? "нейтрально" : score > -0.55f ? "напряжение" : "конфликт";
     private static string BuildPlan(Random random, string actor, string? target) => $"{(random.NextDouble() < 0.5 ? "Днем" : "Вечером")} {actor.ToLowerInvariant()} планирует обсудить приоритеты с {(target ?? "горожанами")}.";
-    private static string BuildEventText(string actor, string? target, string plan, string emotion, string category, float sentiment) => category == "emotion" ? $"{actor} фиксирует эмоцию: {emotion}." : category == "system" ? $"{actor} обновляет план: {plan}" : target is null ? $"{actor} действует самостоятельно." : sentiment >= 0 ? $"{actor} взаимодействует с {target} и усиливает контакт." : $"{actor} конфликтует с {target}, напряжение растет.";
+    private static string BuildEventText(string actor, string? target, string plan, string emotion, string category, float sentiment, string reason) => category == "emotion"
+        ? $"{actor} фиксирует эмоцию: {emotion}. Причина: {reason}"
+        : category == "system"
+            ? $"{actor} обновляет план: {plan} Причина: {reason}"
+            : target is null
+                ? $"{actor} действует самостоятельно. Причина: {reason}"
+                : sentiment >= 0
+                    ? $"{actor} взаимодействует с {target} и усиливает контакт. Причина: {reason}"
+                    : $"{actor} конфликтует с {target}, напряжение растет. Причина: {reason}";
+
+    private static string BuildReason(string actor, string? target, string plan, string category, float sentiment)
+    {
+        if (category == "system")
+        {
+            return "пересмотрены приоритеты после оценки текущей обстановки";
+        }
+
+        if (category == "emotion")
+        {
+            return sentiment >= 0
+                ? "появились сигналы поддержки и доверия"
+                : "накопилось напряжение после предыдущих контактов";
+        }
+
+        if (target is null)
+        {
+            return "агент работал в одиночку и опирался на собственные выводы";
+        }
+
+        if (sentiment >= 0.35f)
+        {
+            return $"у {actor} и {target} совпали цели: {ShortenPlan(plan)}";
+        }
+
+        if (sentiment <= -0.35f)
+        {
+            return $"{actor} и {target} разошлись во взглядах на приоритеты и сроки";
+        }
+
+        return $"{actor} и {target} частично согласны, но спорят о деталях";
+    }
+
+    private static string ShortenPlan(string plan)
+    {
+        if (string.IsNullOrWhiteSpace(plan))
+        {
+            return "план уточняется";
+        }
+
+        return plan.Length <= 80 ? plan : $"{plan[..77]}...";
+    }
 
     private static float PickSentiment(Random random, string category, IReadOnlyDictionary<RelationKey, Relationship> relationships, Agent actor, Agent? target)
     {

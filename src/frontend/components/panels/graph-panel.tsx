@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import {
@@ -165,27 +165,53 @@ export function GraphPanel({
   const [ForceGraph, setForceGraph] = useState<React.ComponentType<any> | null>(null)
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const agentsSignatureRef = useRef("")
+  const relationshipsSignatureRef = useRef("")
+  const initializedRef = useRef(false)
 
   const graphData = useMemo(() => buildGraphData(agents, relationships), [agents, relationships])
 
   useEffect(() => {
     let active = true
-    setDataLoaded(false)
+    if (!initializedRef.current) {
+      setDataLoaded(false)
+    }
 
-    Promise.all([getAgents(), getRelationships()])
-      .then(([loadedAgents, loadedRelationships]) => {
-        if (!active) return
+    const loadData = async () => {
+      const [loadedAgents, loadedRelationships] = await Promise.all([getAgents(), getRelationships()])
+      if (!active) return
+
+      const agentsSignature = JSON.stringify(
+        loadedAgents.map((agent) => [agent.id, agent.mood, agent.currentPlan, agent.memories.length])
+      )
+      const relationshipsSignature = JSON.stringify(
+        loadedRelationships.map((relationship) => [relationship.from, relationship.to, relationship.sentiment, relationship.label])
+      )
+
+      if (agentsSignature !== agentsSignatureRef.current) {
+        agentsSignatureRef.current = agentsSignature
         setAgents(loadedAgents)
+      }
+
+      if (relationshipsSignature !== relationshipsSignatureRef.current) {
+        relationshipsSignatureRef.current = relationshipsSignature
         setRelationships(loadedRelationships)
-      })
-      .finally(() => {
-        if (active) {
-          setDataLoaded(true)
-        }
-      })
+      }
+
+      if (!initializedRef.current) {
+        initializedRef.current = true
+        setDataLoaded(true)
+      }
+    }
+
+    void loadData()
+    const timer = setInterval(() => {
+      void loadData()
+    }, 4000)
 
     return () => {
       active = false
+      clearInterval(timer)
     }
   }, [refreshToken])
 
