@@ -23,3 +23,21 @@ Content-Type: application/json
 }
 
 ###
+
+GET {{LongLifeModels_HostAddress}}/api/agents
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+GET {{LongLifeModels_HostAddress}}/api/relationships
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+GET {{LongLifeModels_HostAddress}}/api/stats
+X-User-Id: demo-user
+Accept: application/json
+
+###

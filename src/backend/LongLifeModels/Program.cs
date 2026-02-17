@@ -57,6 +57,7 @@ builder.Services.AddScoped<MemoryService>();
 builder.Services.AddScoped<MemoryCompressor>();
 builder.Services.AddScoped<AgentBrain>();
 builder.Services.AddScoped<IUserAgentsService, UserAgentsService>();
+builder.Services.AddScoped<IWorldInsightsService, WorldInsightsService>();
 builder.Services.AddScoped<ITickProcessor, TickProcessor>();
 builder.Services.AddSingleton<IEventService, InMemoryEventService>();
 builder.Services.AddSingleton<IAgentCommandQueue, InMemoryAgentCommandQueue>();
