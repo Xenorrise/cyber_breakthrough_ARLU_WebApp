@@ -46,6 +46,7 @@ builder.Services.AddScoped<IVectorStore>(sp => sp.GetRequiredService<QdrantVecto
 builder.Services.AddScoped<MemoryService>();
 builder.Services.AddScoped<MemoryCompressor>();
 builder.Services.AddScoped<AgentBrain>();
+builder.Services.AddSingleton<IEventService, InMemoryEventService>();
 
 builder.Services.AddHostedService<QdrantCollectionInitializer>();
 

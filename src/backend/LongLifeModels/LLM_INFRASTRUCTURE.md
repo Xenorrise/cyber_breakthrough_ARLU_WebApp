@@ -16,8 +16,18 @@
 4. `MemoryCompressor.CompressIfNeededAsync` суммирует старые или низкоприоритетные логи в одну компактную запись памяти и удаляет исходные.
 
 ## Конфигурация
-Установите ключи в `appsettings.json`:
-- `OpenAI.ApiKey`
+Не храните ключи в `appsettings.json` и не коммитьте их в git.
+
+Для локальной сборки/запуска используйте файл `./.env.local` в корне проекта (файл игнорируется git):
+
+```env
+OpenAI__ApiKey=your_openai_key
+Qdrant__ApiKey=your_qdrant_key
+```
+
+`build_and_run.bat` автоматически подхватывает эти значения и передаёт их в backend при запуске контейнера.
+
+Остальные настройки:
 - `Qdrant.BaseUrl` (например `http://localhost:6333`)
 
 ## Пример API
