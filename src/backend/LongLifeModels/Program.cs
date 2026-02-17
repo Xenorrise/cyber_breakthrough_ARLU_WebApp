@@ -94,7 +94,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+var hasHttpsEndpointConfigured =
+    (builder.Configuration["ASPNETCORE_URLS"] ?? builder.Configuration["URLS"] ?? string.Empty)
+        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Any(url => url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+    || !string.IsNullOrWhiteSpace(builder.Configuration["ASPNETCORE_HTTPS_PORT"])
+    || !string.IsNullOrWhiteSpace(builder.Configuration["HTTPS_PORT"]);
+
+if (hasHttpsEndpointConfigured)
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseCors("FrontendCors");
 app.MapControllers();
 app.MapHub<AgentsHub>(AgentHubContracts.HubPath);
@@ -148,7 +159,12 @@ static string ResolveQdrantBaseUrl(string configuredBaseUrl)
         var isQdrantAlias = string.Equals(uri.Host, "qdrant", StringComparison.OrdinalIgnoreCase);
         if (isQdrantAlias)
         {
-            return configuredBaseUrl;
+            if (CanResolveHost(uri.Host))
+            {
+                return configuredBaseUrl;
+            }
+
+            return BuildWithHost(uri, "host.docker.internal", uri.IsDefaultPort ? 6333 : uri.Port);
         }
 
         if (CanResolveHost(uri.Host))

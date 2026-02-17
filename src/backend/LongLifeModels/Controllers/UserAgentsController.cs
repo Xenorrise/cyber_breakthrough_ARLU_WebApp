@@ -66,6 +66,34 @@ public sealed class UserAgentsController(
         return CreatedAtAction(nameof(GetAgent), new { agentId = created.AgentId }, created);
     }
 
+    [HttpPost("generate")]
+    [ProducesResponseType(typeof(AgentDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorDto), StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<AgentDto>> GenerateWithAi(
+        [FromBody] GenerateAgentWithAiRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = ResolveUserId();
+
+        try
+        {
+            var created = await userAgentsService.CreateAgentWithAiAsync(userId, request, cancellationToken);
+            return CreatedAtAction(nameof(GetAgent), new { agentId = created.AgentId }, created);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "Failed to generate agent with AI for user {UserId}.", userId);
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                new ErrorDto
+                {
+                    Code = "agent_generation_failed",
+                    Message = ex.Message
+                });
+        }
+    }
+
     [HttpPost("{agentId:guid}/commands")]
     [ProducesResponseType(typeof(CommandAckDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]

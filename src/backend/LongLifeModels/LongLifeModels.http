@@ -24,6 +24,17 @@ Content-Type: application/json
 
 ###
 
+POST {{LongLifeModels_HostAddress}}/api/user-agents/generate
+X-User-Id: demo-user
+Content-Type: application/json
+
+{
+  "prompt": "Создай исследовательского агента для анализа мировых событий. Характер: любопытный, спокойный, системный.",
+  "model": "gpt-4o-mini"
+}
+
+###
+
 GET {{LongLifeModels_HostAddress}}/api/agents
 X-User-Id: demo-user
 Accept: application/json

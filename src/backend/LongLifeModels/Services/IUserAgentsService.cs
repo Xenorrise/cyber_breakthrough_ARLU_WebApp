@@ -5,6 +5,7 @@ namespace LongLifeModels.Services;
 public interface IUserAgentsService
 {
     Task<AgentDto> CreateAgentAsync(string userId, CreateAgentRequestDto request, CancellationToken cancellationToken);
+    Task<AgentDto> CreateAgentWithAiAsync(string userId, GenerateAgentWithAiRequestDto request, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<AgentDto>> GetAgentsAsync(string userId, CancellationToken cancellationToken);
     Task<AgentDto?> GetAgentAsync(string userId, Guid agentId, CancellationToken cancellationToken);
     Task<PagedResultDto<AgentMessageDto>> GetMessagesAsync(string userId, Guid agentId, int limit, CancellationToken cancellationToken);

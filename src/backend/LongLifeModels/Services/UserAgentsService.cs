@@ -4,6 +4,8 @@ using LongLifeModels.DTOs;
 using LongLifeModels.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace LongLifeModels.Services;
 
@@ -11,9 +13,29 @@ public sealed class UserAgentsService(
     AgentDbContext dbContext,
     IAgentCommandQueue commandQueue,
     IAgentRealtimeNotifier realtimeNotifier,
+    ILLMService llmService,
     IOptions<OpenAIOptions> openAiOptions,
     ILogger<UserAgentsService> logger) : IUserAgentsService
 {
+    private const string AiAgentGenerationSystemPrompt =
+        """
+        You generate one software-agent profile for a simulation.
+        Return ONLY a JSON object with this exact schema:
+        {
+          "name": "string, max 120 chars",
+          "initialState": "string, max 120 chars",
+          "initialEnergy": "number from 0 to 1",
+          "personalityTraits": {
+            "openness": "number from 0 to 1",
+            "conscientiousness": "number from 0 to 1",
+            "extraversion": "number from 0 to 1",
+            "agreeableness": "number from 0 to 1",
+            "neuroticism": "number from 0 to 1"
+          }
+        }
+        No markdown, no code fences, no additional keys.
+        """;
+
     public async Task<AgentDto> CreateAgentAsync(string userId, CreateAgentRequestDto request, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -47,6 +69,33 @@ public sealed class UserAgentsService(
         await NotifyListUpdatedAsync(userId, cancellationToken);
 
         return agentDto;
+    }
+
+    public async Task<AgentDto> CreateAgentWithAiAsync(string userId, GenerateAgentWithAiRequestDto request, CancellationToken cancellationToken)
+    {
+        var userPrompt =
+            $"User request for a new agent:{Environment.NewLine}" +
+            $"{request.Prompt.Trim()}{Environment.NewLine}{Environment.NewLine}" +
+            "Generate one agent profile JSON that best matches the request.";
+
+        var rawResponse = await llmService.GenerateAsync(AiAgentGenerationSystemPrompt, userPrompt, cancellationToken);
+        var blueprint = ParseAiAgentBlueprint(rawResponse);
+
+        var createRequest = new CreateAgentRequestDto
+        {
+            Name = NormalizeName(blueprint.Name),
+            Model = string.IsNullOrWhiteSpace(request.Model) ? null : request.Model.Trim(),
+            InitialState = NormalizeText(blueprint.InitialState ?? blueprint.State, maxLength: 120),
+            InitialEnergy = NormalizeScore(blueprint.InitialEnergy ?? blueprint.Energy ?? 0.8f),
+            PersonalityTraits = NormalizeTraits(blueprint.PersonalityTraits ?? blueprint.Traits)
+        };
+
+        logger.LogInformation(
+            "Generated agent blueprint with AI for user {UserId}. Agent name: {AgentName}.",
+            userId,
+            createRequest.Name);
+
+        return await CreateAgentAsync(userId, createRequest, cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<AgentDto>> GetAgentsAsync(string userId, CancellationToken cancellationToken)
@@ -284,4 +333,111 @@ public sealed class UserAgentsService(
             CreatedAt = message.CreatedAt,
             CorrelationId = message.CorrelationId
         };
+
+    private static PersonalityTraits NormalizeTraits(PersonalityTraits? rawTraits)
+    {
+        var traits = rawTraits ?? new PersonalityTraits();
+        return new PersonalityTraits
+        {
+            Openness = NormalizeScore(traits.Openness),
+            Conscientiousness = NormalizeScore(traits.Conscientiousness),
+            Extraversion = NormalizeScore(traits.Extraversion),
+            Agreeableness = NormalizeScore(traits.Agreeableness),
+            Neuroticism = NormalizeScore(traits.Neuroticism)
+        };
+    }
+
+    private static float NormalizeScore(float value)
+        => Math.Clamp(value, 0f, 1f);
+
+    private static string NormalizeName(string? value)
+    {
+        var normalized = NormalizeText(value, maxLength: 120);
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            return normalized;
+        }
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        return $"AI Agent {suffix}";
+    }
+
+    private static string? NormalizeText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private static AiAgentBlueprint ParseAiAgentBlueprint(string responsePayload)
+    {
+        var json = ExtractJsonObject(responsePayload);
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<AiAgentBlueprint>(
+                json,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    NumberHandling = JsonNumberHandling.AllowReadingFromString
+                });
+
+            return parsed ?? throw new InvalidOperationException("AI returned an empty agent profile payload.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("AI returned malformed JSON while generating an agent profile.", ex);
+        }
+    }
+
+    private static string ExtractJsonObject(string responsePayload)
+    {
+        var trimmed = responsePayload?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            throw new InvalidOperationException("AI returned an empty response while generating an agent.");
+        }
+
+        if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstLineBreak = trimmed.IndexOf('\n');
+            if (firstLineBreak >= 0)
+            {
+                trimmed = trimmed[(firstLineBreak + 1)..];
+            }
+
+            var closingFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+            if (closingFence >= 0)
+            {
+                trimmed = trimmed[..closingFence];
+            }
+
+            trimmed = trimmed.Trim();
+        }
+
+        var start = trimmed.IndexOf('{');
+        var end = trimmed.LastIndexOf('}');
+        if (start < 0 || end <= start)
+        {
+            throw new InvalidOperationException("AI response does not contain a valid JSON object.");
+        }
+
+        return trimmed[start..(end + 1)];
+    }
+
+    private sealed class AiAgentBlueprint
+    {
+        public string? Name { get; init; }
+        public string? InitialState { get; init; }
+        public string? State { get; init; }
+        public float? InitialEnergy { get; init; }
+        public float? Energy { get; init; }
+        public PersonalityTraits? PersonalityTraits { get; init; }
+        public PersonalityTraits? Traits { get; init; }
+    }
 }
