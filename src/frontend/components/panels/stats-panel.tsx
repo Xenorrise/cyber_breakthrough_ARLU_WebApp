@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { MOCK_STATS, MOOD_CONFIG, getStats, type WorldStats } from "@/lib/data"
+import { MOOD_CONFIG, getStats, type WorldStats } from "@/lib/data"
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -55,12 +55,29 @@ function BarChart({ items, maxVal }: { items: { label: string; value: number; co
 }
 
 export function StatsPanel() {
-  const [stats, setStats] = useState<WorldStats>(MOCK_STATS)
+  const [stats, setStats] = useState<WorldStats | null>(null)
 
   // Грузим статистику -- при подключении БД заменить getStats()
   useEffect(() => {
-    getStats().then(setStats)
+    let active = true
+    getStats().then((loadedStats) => {
+      if (active) {
+        setStats(loadedStats)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [])
+
+  if (!stats) {
+    return (
+      <div className="flex h-full items-center justify-center font-mono text-xs" style={{ backgroundColor: "var(--cyber-surface)", color: "var(--muted-foreground)" }}>
+        Загрузка статистики...
+      </div>
+    )
+  }
 
   const eventTypeColors: Record<string, string> = {
     chat: "#4ade80",
@@ -76,8 +93,14 @@ export function StatsPanel() {
     system: "Система",
   }
 
-  const maxEventCount = Math.max(...stats.eventsByType.map((e) => e.count))
-  const maxMoodCount = Math.max(...stats.moodDistribution.map((m) => m.count))
+  const maxEventCount = Math.max(1, ...stats.eventsByType.map((e) => e.count))
+  const maxMoodCount = Math.max(1, ...stats.moodDistribution.map((m) => m.count))
+  const topRelationshipColor =
+    stats.topRelationship.sentiment > 0
+      ? "#4ade80"
+      : stats.topRelationship.sentiment < 0
+        ? "#f87171"
+        : "var(--muted-foreground)"
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--cyber-surface)" }}>
@@ -143,15 +166,15 @@ export function StatsPanel() {
           >
             <div className="flex items-center gap-3">
               <span className="font-mono text-sm" style={{ color: "var(--foreground)" }}>
-                {"Алексей"}
+                {stats.topRelationship.from}
               </span>
               <span className="font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>{"<->"}</span>
               <span className="font-mono text-sm" style={{ color: "var(--foreground)" }}>
-                {"Марина"}
+                {stats.topRelationship.to}
               </span>
             </div>
-            <span className="font-mono text-sm font-bold" style={{ color: "#4ade80" }}>
-              +{(stats.topRelationship.sentiment * 100).toFixed(0)}%
+            <span className="font-mono text-sm font-bold" style={{ color: topRelationshipColor }}>
+              {stats.topRelationship.sentiment > 0 ? "+" : ""}{(stats.topRelationship.sentiment * 100).toFixed(0)}%
             </span>
           </div>
         </div>

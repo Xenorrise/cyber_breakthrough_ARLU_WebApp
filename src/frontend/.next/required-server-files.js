@@ -295,7 +295,17 @@ self.__SERVER_FILES_MANIFEST={
     "turbopack": {
       "root": "D:\\IvanWork\\ARLU\\Proj1\\cyber_breakthrough_ARLU_WebApp\\src\\frontend"
     },
-    "distDirRoot": ".next"
+    "distDirRoot": ".next",
+    "_originalRewrites": {
+      "beforeFiles": [],
+      "afterFiles": [
+        {
+          "source": "/api/backend/:path*",
+          "destination": "http://localhost:5133/:path*"
+        }
+      ],
+      "fallback": []
+    }
   },
   "appDir": "D:\\IvanWork\\ARLU\\Proj1\\cyber_breakthrough_ARLU_WebApp\\src\\frontend",
   "relativeAppDir": "",

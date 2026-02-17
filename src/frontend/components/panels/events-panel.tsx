@@ -1,6 +1,7 @@
 "use client"
 
-import { MOCK_AGENTS, MOCK_EVENTS, MOOD_CONFIG, type AgentEvent } from "@/lib/data"
+import { useEffect, useState } from "react"
+import { MOOD_CONFIG, getAgents, getEvents, type Agent, type AgentEvent } from "@/lib/data"
 
 // Типы событий и их стили
 const EVENT_TYPE_LABELS: Record<AgentEvent["type"], { label: string; color: string }> = {
@@ -17,8 +18,29 @@ function formatTime(iso: string) {
 }
 
 export function EventsPanel() {
-  const events = MOCK_EVENTS
-  const agents = MOCK_AGENTS
+  const [events, setEvents] = useState<AgentEvent[]>([])
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+
+    Promise.all([getEvents(), getAgents()])
+      .then(([loadedEvents, loadedAgents]) => {
+        if (!active) return
+        setEvents(loadedEvents)
+        setAgents(loadedAgents)
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <div className="flex h-full w-full" style={{ backgroundColor: "var(--cyber-surface)" }}>
@@ -81,6 +103,18 @@ export function EventsPanel() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-1.5">
+          {loading && (
+            <div className="font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>
+              Загрузка событий...
+            </div>
+          )}
+
+          {!loading && events.length === 0 && (
+            <div className="font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>
+              Событий пока нет
+            </div>
+          )}
+
           {events.map((evt) => {
             const typeConf = EVENT_TYPE_LABELS[evt.type]
             return (

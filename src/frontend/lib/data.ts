@@ -319,27 +319,345 @@ export const MOCK_STATS: WorldStats = {
 
 // ===== ДОСТУП К ДАННЫМ (замени на реальные запросы) =====
 
+interface BackendPersonalityTraits {
+  openness?: number
+  conscientiousness?: number
+  extraversion?: number
+  agreeableness?: number
+  neuroticism?: number
+}
+
+interface BackendAgentDto {
+  agentId: string
+  name: string
+  model: string
+  status: string
+  state: string
+  energy: number
+  personalityTraits?: BackendPersonalityTraits
+}
+
+interface BackendEventDto {
+  id: string
+  type: string
+  payload: unknown
+  createdAt: string
+}
+
+const BACKEND_API_BASE = "/api/backend"
+const DEFAULT_USER_ID = "demo-user"
+
+function getUserId(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_USER_ID?.trim()
+  return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_USER_ID
+}
+
+async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers)
+  headers.set("Accept", "application/json")
+  headers.set("X-User-Id", getUserId())
+  if (init?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
+
+  const response = await fetch(`${BACKEND_API_BASE}${path}`, {
+    ...init,
+    headers,
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(`Backend request failed: ${response.status} ${response.statusText}`)
+  }
+
+  return (await response.json()) as T
+}
+
+function toMood(status: string, energyRaw: number): Mood {
+  const statusLower = status.toLowerCase()
+  const energy = Number.isFinite(energyRaw) ? Math.max(0, Math.min(1, energyRaw)) : 0.5
+
+  if (statusLower.includes("error") || statusLower.includes("failed")) return "angry"
+  if (statusLower.includes("stop") || statusLower.includes("archived")) return "sad"
+  if (statusLower.includes("pause")) return "anxious"
+  if (energy >= 0.8) return "excited"
+  if (energy >= 0.6) return "happy"
+  if (energy >= 0.4) return "neutral"
+  if (energy >= 0.2) return "anxious"
+  return "sad"
+}
+
+function toTraits(traits?: BackendPersonalityTraits): string[] {
+  if (!traits) return ["adaptive"]
+
+  const labels: Array<{ key: keyof BackendPersonalityTraits; label: string }> = [
+    { key: "openness", label: "curious" },
+    { key: "conscientiousness", label: "disciplined" },
+    { key: "extraversion", label: "social" },
+    { key: "agreeableness", label: "cooperative" },
+    { key: "neuroticism", label: "sensitive" },
+  ]
+
+  const sorted = labels
+    .map((item) => ({ label: item.label, value: Number(traits[item.key] ?? 0) }))
+    .sort((a, b) => b.value - a.value)
+    .filter((item) => item.value > 0)
+    .slice(0, 3)
+    .map((item) => item.label)
+
+  return sorted.length > 0 ? sorted : ["adaptive"]
+}
+
+function mapBackendAgent(agent: BackendAgentDto): Agent {
+  const mood = toMood(agent.status, agent.energy)
+  return {
+    id: agent.agentId,
+    name: agent.name,
+    avatar: agent.name?.trim()?.charAt(0)?.toUpperCase() || "?",
+    mood,
+    traits: toTraits(agent.personalityTraits),
+    description: `${agent.model} • status: ${agent.status}`,
+    currentPlan: agent.state || "No current plan",
+    memories: agent.state ? [`Current state: ${agent.state}`] : [],
+  }
+}
+
+function asRecord(input: unknown): Record<string, unknown> | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null
+  return input as Record<string, unknown>
+}
+
+function readString(record: Record<string, unknown> | null, keys: string[]): string | undefined {
+  if (!record) return undefined
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim().length > 0) return value.trim()
+  }
+  return undefined
+}
+
+function normalizeEventType(rawType: string): AgentEvent["type"] {
+  const t = rawType.toLowerCase()
+  if (t.includes("chat") || t.includes("message")) return "chat"
+  if (t.includes("emotion") || t.includes("mood")) return "emotion"
+  if (t.includes("system") || t.includes("status") || t.includes("error") || t.includes("progress")) return "system"
+  return "action"
+}
+
+function payloadToText(payload: unknown, eventType: string): string {
+  const record = asRecord(payload)
+  const directText = readString(record, ["text", "message", "description", "content"])
+  if (directText) return directText
+  if (record) {
+    const nested = asRecord(record.payload)
+    const nestedText = readString(nested, ["text", "message", "description", "content"])
+    if (nestedText) return nestedText
+  }
+
+  try {
+    const json = JSON.stringify(payload)
+    if (!json || json === "{}") return eventType
+    return json.slice(0, 200)
+  } catch {
+    return eventType
+  }
+}
+
+function mapBackendEvent(event: BackendEventDto, agentsById: Map<string, Agent>): AgentEvent {
+  const record = asRecord(event.payload)
+  const nested = asRecord(record?.payload)
+  const source = nested ?? record
+
+  const agentId =
+    readString(source, ["agentId", "agent_id", "id"]) ??
+    readString(asRecord(source?.agent), ["id", "agentId"]) ??
+    "system"
+
+  const agentName =
+    readString(source, ["agentName", "agent_name", "name"]) ??
+    agentsById.get(agentId)?.name ??
+    "System"
+
+  return {
+    id: event.id,
+    agentId,
+    agentName,
+    type: normalizeEventType(event.type),
+    text: payloadToText(event.payload, event.type),
+    timestamp: event.createdAt,
+  }
+}
+
+function buildRelationshipsFromEvents(events: AgentEvent[], agents: Agent[]): Relationship[] {
+  const existingIds = new Set(agents.map((a) => a.id))
+  const relCounts = new Map<string, number>()
+
+  for (let i = 1; i < events.length; i += 1) {
+    const previous = events[i - 1]
+    const current = events[i]
+    if (
+      previous.agentId === current.agentId ||
+      previous.agentId === "system" ||
+      current.agentId === "system" ||
+      !existingIds.has(previous.agentId) ||
+      !existingIds.has(current.agentId)
+    ) {
+      continue
+    }
+
+    const key = `${previous.agentId}|${current.agentId}`
+    relCounts.set(key, (relCounts.get(key) ?? 0) + 1)
+  }
+
+  return Array.from(relCounts.entries())
+    .map(([key, count]) => {
+      const [from, to] = key.split("|")
+      return {
+        from,
+        to,
+        sentiment: Math.min(0.8, count / 5),
+        label: "interaction",
+      } satisfies Relationship
+    })
+    .slice(0, 80)
+}
+
+function buildStats(agents: Agent[], events: AgentEvent[], relationships: Relationship[]): WorldStats {
+  const moodWeight: Record<Mood, number> = {
+    happy: 0.8,
+    neutral: 0.5,
+    sad: 0.2,
+    angry: 0.15,
+    excited: 0.9,
+    anxious: 0.35,
+  }
+
+  const eventTypeOrder: AgentEvent["type"][] = ["chat", "action", "emotion", "system"]
+  const eventsByType = eventTypeOrder.map((type) => ({
+    type,
+    count: events.filter((e) => e.type === type).length,
+  }))
+
+  const moodDistribution = (Object.keys(MOOD_CONFIG) as Mood[]).map((mood) => ({
+    mood,
+    count: agents.filter((a) => a.mood === mood).length,
+  }))
+
+  const avgMood =
+    agents.length === 0
+      ? 0
+      : agents.reduce((sum, agent) => sum + moodWeight[agent.mood], 0) / agents.length
+
+  const activity = new Map<string, number>()
+  for (const event of events) {
+    if (event.agentId !== "system") {
+      activity.set(event.agentId, (activity.get(event.agentId) ?? 0) + 1)
+    }
+  }
+
+  const mostActiveAgentId =
+    Array.from(activity.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? agents[0]?.id ?? "-"
+  const mostActiveAgent = agents.find((a) => a.id === mostActiveAgentId)?.name ?? mostActiveAgentId
+
+  const topRelationshipRaw = relationships
+    .slice()
+    .sort((a, b) => Math.abs(b.sentiment) - Math.abs(a.sentiment))[0]
+
+  const topRelationship = topRelationshipRaw
+    ? {
+        from: agents.find((a) => a.id === topRelationshipRaw.from)?.name ?? topRelationshipRaw.from,
+        to: agents.find((a) => a.id === topRelationshipRaw.to)?.name ?? topRelationshipRaw.to,
+        sentiment: topRelationshipRaw.sentiment,
+      }
+    : { from: "-", to: "-", sentiment: 0 }
+
+  return {
+    totalEvents: events.length,
+    totalConversations: eventsByType.find((x) => x.type === "chat")?.count ?? 0,
+    avgMood,
+    mostActiveAgent,
+    topRelationship,
+    eventsByType,
+    moodDistribution,
+  }
+}
+
+export async function addEvent(text: string): Promise<boolean> {
+  const payload = {
+    type: "ui.note",
+    payload: {
+      text,
+      message: text,
+      source: "frontend",
+      agentName: "Operator",
+    },
+  }
+
+  try {
+    await backendRequest<unknown>("/api/events", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+    return true
+  } catch (error) {
+    console.warn("[data] addEvent fallback, backend unavailable", error)
+    return false
+  }
+}
+
 export async function getAgents(): Promise<Agent[]> {
-  // TODO: fetch("/api/agents") или SignalR
-  return MOCK_AGENTS
+  try {
+    const agents = await backendRequest<BackendAgentDto[]>("/api/user-agents")
+    return agents.map(mapBackendAgent)
+  } catch (error) {
+    console.warn("[data] getAgents fallback to mock", error)
+    return MOCK_AGENTS
+  }
 }
 
 export async function getAgent(id: string): Promise<Agent | undefined> {
-  // TODO: заменить на fetch(`/api/agents/${id}`)
-  return MOCK_AGENTS.find((a) => a.id === id)
+  try {
+    const agent = await backendRequest<BackendAgentDto>(`/api/user-agents/${encodeURIComponent(id)}`)
+    return mapBackendAgent(agent)
+  } catch {
+    return MOCK_AGENTS.find((a) => a.id === id)
+  }
 }
 
 export async function getEvents(): Promise<AgentEvent[]> {
-  // TODO: fetch("/api/events") или SignalR подписка
-  return MOCK_EVENTS
+  try {
+    const [agents, events] = await Promise.all([
+      getAgents(),
+      backendRequest<BackendEventDto[]>("/api/events"),
+    ])
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+    return events.map((event) => mapBackendEvent(event, agentsById))
+  } catch (error) {
+    console.warn("[data] getEvents fallback to mock", error)
+    return MOCK_EVENTS
+  }
 }
 
 export async function getRelationships(): Promise<Relationship[]> {
-  // TODO: fetch("/api/relationships")
-  return MOCK_RELATIONSHIPS
+  try {
+    const [agents, events] = await Promise.all([getAgents(), getEvents()])
+    return buildRelationshipsFromEvents(events, agents)
+  } catch (error) {
+    console.warn("[data] getRelationships fallback to mock", error)
+    return MOCK_RELATIONSHIPS
+  }
 }
 
 export async function getStats(): Promise<WorldStats> {
-  // TODO: fetch("/api/stats")
-  return MOCK_STATS
+  try {
+    const [agents, events, relationships] = await Promise.all([
+      getAgents(),
+      getEvents(),
+      getRelationships(),
+    ])
+    return buildStats(agents, events, relationships)
+  } catch (error) {
+    console.warn("[data] getStats fallback to mock", error)
+    return MOCK_STATS
+  }
 }

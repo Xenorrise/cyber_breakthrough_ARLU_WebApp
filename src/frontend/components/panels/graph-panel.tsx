@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import {
-  MOCK_AGENTS,
-  MOCK_RELATIONSHIPS,
   MOOD_CONFIG,
+  getAgents,
+  getRelationships,
   type Agent,
   type Relationship,
 } from "@/lib/data"
@@ -146,22 +146,41 @@ function Legend() {
 }
 
 // Панель графа -- узлы, связи, физика
-export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agentId: string) => void; fromGraph?: boolean }) {
+export function GraphPanel({ onSelectAgent }: { onSelectAgent?: (agentId: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [graphLoaded, setGraphLoaded] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [relationships, setRelationships] = useState<Relationship[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [ForceGraph, setForceGraph] = useState<React.ComponentType<any> | null>(null)
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
 
-  // Build graph once -- when DB is connected, this will use fetched data
-  const graphData = useMemo(
-    () => buildGraphData(MOCK_AGENTS, MOCK_RELATIONSHIPS),
-    []
-  )
+  const graphData = useMemo(() => buildGraphData(agents, relationships), [agents, relationships])
+
+  useEffect(() => {
+    let active = true
+
+    Promise.all([getAgents(), getRelationships()])
+      .then(([loadedAgents, loadedRelationships]) => {
+        if (!active) return
+        setAgents(loadedAgents)
+        setRelationships(loadedRelationships)
+      })
+      .finally(() => {
+        if (active) {
+          setDataLoaded(true)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Track container size
   useEffect(() => {
@@ -300,20 +319,20 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
   // Tooltip content -- shows relationships when hovering
   const tooltipContent = useMemo(() => {
     if (!hoveredNode) return null
-    const agent = MOCK_AGENTS.find((a) => a.id === hoveredNode.id)
+    const agent = agents.find((a) => a.id === hoveredNode.id)
     if (!agent) return null
     const moodCfg = MOOD_CONFIG[agent.mood]
 
-    const rels = MOCK_RELATIONSHIPS.filter(
+    const rels = relationships.filter(
       (r) => r.from === agent.id || r.to === agent.id
     ).map((r) => {
       const otherId = r.from === agent.id ? r.to : r.from
-      const other = MOCK_AGENTS.find((a) => a.id === otherId)
+      const other = agents.find((a) => a.id === otherId)
       return { name: other?.name ?? otherId, sentiment: r.sentiment, label: r.label }
     })
 
     return { agent, moodCfg, rels }
-  }, [hoveredNode])
+  }, [hoveredNode, agents, relationships])
 
   // Node click -- navigate to agent profile
   const handleNodeClick = useCallback(
@@ -368,7 +387,7 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
         }}
       />
 
-      <LoadingOverlay visible={!graphLoaded} />
+      <LoadingOverlay visible={!graphLoaded || !dataLoaded} />
 
       {ForceGraph && dimensions.width > 0 && (
         <ForceGraph

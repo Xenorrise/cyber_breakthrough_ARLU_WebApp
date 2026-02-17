@@ -1,26 +1,34 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
-  MOCK_AGENTS,
-  MOCK_EVENTS,
-  MOCK_RELATIONSHIPS,
   MOOD_CONFIG,
+  getAgents,
+  getEvents,
+  getRelationships,
   type Agent,
+  type AgentEvent,
+  type Relationship,
 } from "@/lib/data"
 
 function AgentDetail({
   agent,
   onBack,
   fromGraph,
+  allAgents,
+  allEvents,
+  allRelationships,
 }: {
   agent: Agent
   onBack: () => void
   fromGraph?: boolean
+  allAgents: Agent[]
+  allEvents: AgentEvent[]
+  allRelationships: Relationship[]
 }) {
   const mc = MOOD_CONFIG[agent.mood]
-  const events = MOCK_EVENTS.filter((e) => e.agentId === agent.id)
-  const relations = MOCK_RELATIONSHIPS.filter(
+  const events = allEvents.filter((e) => e.agentId === agent.id)
+  const relations = allRelationships.filter(
     (r) => r.from === agent.id || r.to === agent.id
   )
 
@@ -128,7 +136,7 @@ function AgentDetail({
           <div className="flex flex-col gap-1.5">
             {relations.map((rel, i) => {
               const otherId = rel.from === agent.id ? rel.to : rel.from
-              const other = MOCK_AGENTS.find((a) => a.id === otherId)
+              const other = allAgents.find((a) => a.id === otherId)
               const sentColor = rel.sentiment > 0 ? "#4ade80" : rel.sentiment < 0 ? "#f87171" : "#a0a0b0"
               return (
                 <div
@@ -199,7 +207,31 @@ export function AgentsPanel({
   fromGraph?: boolean
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(preSelectedAgentId ?? null)
-  const agents = MOCK_AGENTS
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [events, setEvents] = useState<AgentEvent[]>([])
+  const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+
+    Promise.all([getAgents(), getEvents(), getRelationships()])
+      .then(([loadedAgents, loadedEvents, loadedRelationships]) => {
+        if (!active) return
+        setAgents(loadedAgents)
+        setEvents(loadedEvents)
+        setRelationships(loadedRelationships)
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Синхро с внешним выбором (из клика на ноду)
   const prevPreSelected = useRef(preSelectedAgentId)
@@ -216,12 +248,31 @@ export function AgentsPanel({
     return (
       <AgentDetail
         agent={selected}
+        allAgents={agents}
+        allEvents={events}
+        allRelationships={relationships}
         onBack={() => {
           setSelectedId(null)
           onClearSelection?.()
         }}
         fromGraph={fromGraph}
       />
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center font-mono text-xs" style={{ backgroundColor: "var(--cyber-surface)", color: "var(--muted-foreground)" }}>
+        Загрузка агентов...
+      </div>
+    )
+  }
+
+  if (agents.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center font-mono text-xs" style={{ backgroundColor: "var(--cyber-surface)", color: "var(--muted-foreground)" }}>
+        Агентов пока нет
+      </div>
     )
   }
 

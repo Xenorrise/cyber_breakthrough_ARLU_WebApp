@@ -7,6 +7,7 @@ import { EventsPanel } from "@/components/panels/events-panel"
 import { AgentsPanel } from "@/components/panels/agents-panel"
 import { StatsPanel } from "@/components/panels/stats-panel"
 import { MessagesPanel } from "@/components/panels/messages-panel"
+import { addEvent } from "@/lib/data"
 
 /**
  * Главная. activeTab -- активная вкладка.
@@ -19,8 +20,11 @@ export default function Home() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [sourceTab, setSourceTab] = useState<TabId | null>(null)
 
-  const handleAddEvent = (text: string) => {
-    console.log("[v0] Событие:", text)
+  const handleAddEvent = async (text: string) => {
+    const saved = await addEvent(text)
+    if (!saved) {
+      console.warn("[ui] Event was not sent to backend, fallback mode is active")
+    }
   }
 
   // Клик на ноду графа -> открыть досье + запомнить что пришли из графа
