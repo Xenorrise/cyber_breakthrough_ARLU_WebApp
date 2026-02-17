@@ -26,14 +26,14 @@ public sealed class EventsController(
         [FromBody] CreateEventRequestDto request,
         CancellationToken cancellationToken)
     {
-        var created = await eventService.CreateAsync(request, cancellationToken);
+        var userId = TryResolveUserId(out var resolvedUserId) ? resolvedUserId : null;
+        var created = await eventService.CreateAsync(request, userId, createdAt: null, cancellationToken);
 
         if (IsWorldEvent(request.Type) &&
-            TryResolveUserId(out var userId) &&
             !string.IsNullOrWhiteSpace(userId))
         {
             var worldMessage = ExtractWorldMessage(request) ?? $"World event: {request.Type}";
-            await FanOutWorldEventAsync(userId, worldMessage, created.Id, cancellationToken);
+            await FanOutWorldEventAsync(userId!, worldMessage, created.Id, cancellationToken);
         }
 
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
@@ -49,7 +49,8 @@ public sealed class EventsController(
     [ProducesResponseType(typeof(IReadOnlyCollection<EventDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyCollection<EventDto>>> GetAll(CancellationToken cancellationToken)
     {
-        var events = await eventService.GetAllAsync(cancellationToken);
+        var userId = ResolveUserId();
+        var events = await eventService.GetAllAsync(userId, cancellationToken);
         return Ok(events);
     }
 
@@ -64,7 +65,8 @@ public sealed class EventsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<EventDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var found = await eventService.GetByIdAsync(id, cancellationToken);
+        var userId = ResolveUserId();
+        var found = await eventService.GetByIdAsync(id, userId, cancellationToken);
         if (found is null)
         {
             return NotFound();
@@ -156,6 +158,19 @@ public sealed class EventsController(
             logger.LogDebug("Event was created without user context: {Reason}", ex.Message);
             userId = null;
             return false;
+        }
+    }
+
+    private string ResolveUserId()
+    {
+        try
+        {
+            return userContextService.GetRequiredUserId(User, Request.Headers);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogWarning("Unauthorized events access: {Reason}", ex.Message);
+            throw new BadHttpRequestException(ex.Message, StatusCodes.Status401Unauthorized);
         }
     }
 

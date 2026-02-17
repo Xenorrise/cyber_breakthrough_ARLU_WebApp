@@ -53,3 +53,29 @@ Accept: application/json
 
 ###
 
+GET {{LongLifeModels_HostAddress}}/api/world/time
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+POST {{LongLifeModels_HostAddress}}/api/world/time/speed
+X-User-Id: demo-user
+Content-Type: application/json
+
+{
+  "speed": 2.0
+}
+
+###
+
+POST {{LongLifeModels_HostAddress}}/api/world/time/advance
+X-User-Id: demo-user
+Content-Type: application/json
+
+{
+  "minutes": 180
+}
+
+###
+

@@ -21,6 +21,7 @@ export function CyberFrame({
   onAddEvent,
   timeSpeed = 1,
   onTimeSpeedChange,
+  worldTime,
 }: {
   children: React.ReactNode
   activeTab?: TabId
@@ -28,6 +29,7 @@ export function CyberFrame({
   onAddEvent?: (text: string) => void
   timeSpeed?: number
   onTimeSpeedChange?: (speed: number) => void
+  worldTime?: string | null
 }) {
   const [time, setTime] = useState("--:--:--")
   const [date, setDate] = useState("--.--.----")
@@ -37,27 +39,50 @@ export function CyberFrame({
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!worldTime) {
+      setTime("--:--:--")
+      setDate("--.--.----")
+      return
+    }
+
+    const base = new Date(worldTime)
+    if (Number.isNaN(base.getTime())) {
+      setTime("--:--:--")
+      setDate("--.--.----")
+      return
+    }
+
+    let virtualTimeMs = base.getTime()
+    const speed = Math.max(0, timeSpeed)
+
     const tick = () => {
-      const now = new Date()
+      const current = new Date(virtualTimeMs)
       setTime(
-        now.toLocaleTimeString("ru-RU", {
+        current.toLocaleTimeString("ru-RU", {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
         })
       )
       setDate(
-        now.toLocaleDateString("ru-RU", {
+        current.toLocaleDateString("ru-RU", {
           day: "2-digit",
           month: "2-digit",
           year: "numeric",
         })
       )
+
+      // 1.0x = 1 in-game minute per real second.
+      virtualTimeMs += 1000 * speed * 60
     }
+
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [worldTime, timeSpeed])
 
   const handleSubmitEvent = () => {
     if (eventText.trim() && onAddEvent) {

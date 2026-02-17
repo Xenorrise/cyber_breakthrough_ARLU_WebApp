@@ -10,6 +10,7 @@ namespace LongLifeModels.Services;
 public sealed class TickProcessor(
     IServiceScopeFactory scopeFactory,
     IOptions<TickProcessorOptions> options,
+    IWorldSimulationService worldSimulationService,
     ILogger<TickProcessor> logger) : ITickProcessor
 {
     private readonly TickProcessorOptions _config = options.Value;
@@ -78,7 +79,8 @@ public sealed class TickProcessor(
             .FirstOrDefaultAsync(ct);
 
         var correlationId = lastUserMessage?.CorrelationId;
-        var worldContext = BuildWorldContext(agent, lastUserMessage?.Content, currentTickTime);
+        var worldTime = await worldSimulationService.GetWorldTimeAsync(agent.UserId, ct);
+        var worldContext = BuildWorldContext(agent, lastUserMessage?.Content, worldTime.GameTime);
 
         await notifier.NotifyAgentProgressAsync(
             agent.UserId,
@@ -202,9 +204,9 @@ public sealed class TickProcessor(
         }
     }
 
-    private string BuildWorldContext(Agent agent, string? lastMessage, DateTime currentTickTime)
+    private string BuildWorldContext(Agent agent, string? lastMessage, DateTimeOffset gameTime)
     {
-        var context = $"Time: {currentTickTime:yyyy-MM-dd HH:mm:ss}. Agent state: {agent.State}. Last user message: {lastMessage ?? "(empty)"}";
+        var context = $"Simulation time: {gameTime:yyyy-MM-dd HH:mm:ss}. Agent state: {agent.State}. Emotion: {agent.CurrentEmotion}. Last user message: {lastMessage ?? "(empty)"}";
         if (context.Length <= _config.WorldContextMaxLength)
         {
             return context;
@@ -249,7 +251,13 @@ public sealed class TickProcessor(
                 ThreadId = x.ThreadId,
                 CreatedAt = x.CreatedAt,
                 LastActiveAt = x.LastActiveAt,
-                PersonalityTraits = x.PersonalityTraits
+                PersonalityTraits = x.PersonalityTraits,
+                Description = x.Description,
+                Emotion = x.CurrentEmotion,
+                Traits = string.IsNullOrWhiteSpace(x.TraitSummary)
+                    ? null
+                    : x.TraitSummary.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+                CurrentPlan = x.State
             })
             .ToArray();
     }

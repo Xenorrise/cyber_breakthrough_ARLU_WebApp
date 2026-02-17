@@ -31,7 +31,10 @@ public sealed class AgentDbContext(DbContextOptions<AgentDbContext> options) : D
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Model).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.State).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.State).HasMaxLength(400).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.CurrentEmotion).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.TraitSummary).HasMaxLength(500).IsRequired();
             entity.Property(x => x.CreatedAt).IsRequired();
             entity.Property(x => x.LastActiveAt).IsRequired();
             entity.Property(x => x.ThreadId).IsRequired();

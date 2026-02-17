@@ -1,22 +1,22 @@
-/**
- * Слой данных -- типы и моки.
- * Сейчас захардкожено, при подключении БД замени getAgents(), getEvents() и т.д.
- * Компоненты трогать не нужно -- зависят только от типов.
+﻿/**
+ * РЎР»РѕР№ РґР°РЅРЅС‹С… -- С‚РёРїС‹ Рё РјРѕРєРё.
+ * РЎРµР№С‡Р°СЃ Р·Р°С…Р°СЂРґРєРѕР¶РµРЅРѕ, РїСЂРё РїРѕРґРєР»СЋС‡РµРЅРёРё Р‘Р” Р·Р°РјРµРЅРё getAgents(), getEvents() Рё С‚.Рґ.
+ * РљРѕРјРїРѕРЅРµРЅС‚С‹ С‚СЂРѕРіР°С‚СЊ РЅРµ РЅСѓР¶РЅРѕ -- Р·Р°РІРёСЃСЏС‚ С‚РѕР»СЊРєРѕ РѕС‚ С‚РёРїРѕРІ.
  */
 
-// ===== ТИПЫ =====
+// ===== РўРРџР« =====
 
 export type Mood = "happy" | "neutral" | "sad" | "angry" | "excited" | "anxious"
 
 export interface Agent {
   id: string
   name: string
-  avatar: string        // аватар буква/эмо
+  avatar: string        // Р°РІР°С‚Р°СЂ Р±СѓРєРІР°/СЌРјРѕ
   mood: Mood
-  traits: string[]      // черты
+  traits: string[]      // С‡РµСЂС‚С‹
   description: string
   currentPlan: string
-  memories: string[]    // воспоминания
+  memories: string[]    // РІРѕСЃРїРѕРјРёРЅР°РЅРёСЏ
 }
 
 export interface AgentEvent {
@@ -31,8 +31,8 @@ export interface AgentEvent {
 export interface Relationship {
   from: string          // agent id
   to: string            // agent id
-  sentiment: number     // -1 (враг) до 1 (друг)
-  label?: string        // "друзья", "враги", "знакомые"
+  sentiment: number     // -1 (РІСЂР°Рі) РґРѕ 1 (РґСЂСѓРі)
+  label?: string        // "РґСЂСѓР·СЊСЏ", "РІСЂР°РіРё", "Р·РЅР°РєРѕРјС‹Рµ"
 }
 
 export interface WorldStats {
@@ -45,130 +45,130 @@ export interface WorldStats {
   moodDistribution: { mood: Mood; count: number }[]
 }
 
-// ===== НАСТРОЕНИЯ =====
+// ===== РќРђРЎРўР РћР•РќРРЇ =====
 
 export const MOOD_CONFIG: Record<Mood, { color: string; label: string }> = {
-  happy:   { color: "#4ade80", label: "Счастлив" },
-  neutral: { color: "#a0a0b0", label: "Нейтрален" },
-  sad:     { color: "#60a5fa", label: "Грустит" },
-  angry:   { color: "#f87171", label: "Злится" },
-  excited: { color: "#e5c34b", label: "Воодушевлён" },
-  anxious: { color: "#c084fc", label: "Тревожится" },
+  happy:   { color: "#4ade80", label: "РЎС‡Р°СЃС‚Р»РёРІ" },
+  neutral: { color: "#a0a0b0", label: "РќРµР№С‚СЂР°Р»РµРЅ" },
+  sad:     { color: "#60a5fa", label: "Р“СЂСѓСЃС‚РёС‚" },
+  angry:   { color: "#f87171", label: "Р—Р»РёС‚СЃСЏ" },
+  excited: { color: "#e5c34b", label: "Р’РѕРѕРґСѓС€РµРІР»С‘РЅ" },
+  anxious: { color: "#c084fc", label: "РўСЂРµРІРѕР¶РёС‚СЃСЏ" },
 }
 
-// ===== МОКСИ =====
+// ===== РњРћРљРЎР =====
 
 export const MOCK_AGENTS: Agent[] = [
   {
     id: "agent-1",
-    name: "Алексей",
-    avatar: "А",
+    name: "РђР»РµРєСЃРµР№",
+    avatar: "Рђ",
     mood: "happy",
-    traits: ["общительный", "оптимист", "любопытный"],
-    description: "Молодой исследователь, который всегда ищет новые знакомства. Верит в лучшее в людях.",
-    currentPlan: "Поговорить с Мариной о вчерашнем событии",
+    traits: ["РѕР±С‰РёС‚РµР»СЊРЅС‹Р№", "РѕРїС‚РёРјРёСЃС‚", "Р»СЋР±РѕРїС‹С‚РЅС‹Р№"],
+    description: "РњРѕР»РѕРґРѕР№ РёСЃСЃР»РµРґРѕРІР°С‚РµР»СЊ, РєРѕС‚РѕСЂС‹Р№ РІСЃРµРіРґР° РёС‰РµС‚ РЅРѕРІС‹Рµ Р·РЅР°РєРѕРјСЃС‚РІР°. Р’РµСЂРёС‚ РІ Р»СѓС‡С€РµРµ РІ Р»СЋРґСЏС….",
+    currentPlan: "РџРѕРіРѕРІРѕСЂРёС‚СЊ СЃ РњР°СЂРёРЅРѕР№ Рѕ РІС‡РµСЂР°С€РЅРµРј СЃРѕР±С‹С‚РёРё",
     memories: [
-      "Встретил Марину на площади",
-      "Поспорил с Виктором о политике",
-      "Нашёл старую книгу в библиотеке",
+      "Р’СЃС‚СЂРµС‚РёР» РњР°СЂРёРЅСѓ РЅР° РїР»РѕС‰Р°РґРё",
+      "РџРѕСЃРїРѕСЂРёР» СЃ Р’РёРєС‚РѕСЂРѕРј Рѕ РїРѕР»РёС‚РёРєРµ",
+      "РќР°С€С‘Р» СЃС‚Р°СЂСѓСЋ РєРЅРёРіСѓ РІ Р±РёР±Р»РёРѕС‚РµРєРµ",
     ],
   },
   {
     id: "agent-2",
-    name: "Марина",
-    avatar: "М",
+    name: "РњР°СЂРёРЅР°",
+    avatar: "Рњ",
     mood: "neutral",
-    traits: ["задумчивая", "художница", "интроверт"],
-    description: "Талантливая художница, предпочитает одиночество. Наблюдает за миром через призму искусства.",
-    currentPlan: "Закончить картину заката",
+    traits: ["Р·Р°РґСѓРјС‡РёРІР°СЏ", "С…СѓРґРѕР¶РЅРёС†Р°", "РёРЅС‚СЂРѕРІРµСЂС‚"],
+    description: "РўР°Р»Р°РЅС‚Р»РёРІР°СЏ С…СѓРґРѕР¶РЅРёС†Р°, РїСЂРµРґРїРѕС‡РёС‚Р°РµС‚ РѕРґРёРЅРѕС‡РµСЃС‚РІРѕ. РќР°Р±Р»СЋРґР°РµС‚ Р·Р° РјРёСЂРѕРј С‡РµСЂРµР· РїСЂРёР·РјСѓ РёСЃРєСѓСЃСЃС‚РІР°.",
+    currentPlan: "Р—Р°РєРѕРЅС‡РёС‚СЊ РєР°СЂС‚РёРЅСѓ Р·Р°РєР°С‚Р°",
     memories: [
-      "Разговор с Алексеем был приятным",
-      "Виктор показался грубым",
-      "Увидела красивый закат",
+      "Р Р°Р·РіРѕРІРѕСЂ СЃ РђР»РµРєСЃРµРµРј Р±С‹Р» РїСЂРёСЏС‚РЅС‹Рј",
+      "Р’РёРєС‚РѕСЂ РїРѕРєР°Р·Р°Р»СЃСЏ РіСЂСѓР±С‹Рј",
+      "РЈРІРёРґРµР»Р° РєСЂР°СЃРёРІС‹Р№ Р·Р°РєР°С‚",
     ],
   },
   {
     id: "agent-3",
-    name: "Виктор",
-    avatar: "В",
+    name: "Р’РёРєС‚РѕСЂ",
+    avatar: "Р’",
     mood: "angry",
-    traits: ["прямолинейный", "амбициозный", "упрямый"],
-    description: "Бывший военный, привык командовать. Не терпит слабости, но глубоко внутри одинок.",
-    currentPlan: "Доказать свою правоту Алексею",
+    traits: ["РїСЂСЏРјРѕР»РёРЅРµР№РЅС‹Р№", "Р°РјР±РёС†РёРѕР·РЅС‹Р№", "СѓРїСЂСЏРјС‹Р№"],
+    description: "Р‘С‹РІС€РёР№ РІРѕРµРЅРЅС‹Р№, РїСЂРёРІС‹Рє РєРѕРјР°РЅРґРѕРІР°С‚СЊ. РќРµ С‚РµСЂРїРёС‚ СЃР»Р°Р±РѕСЃС‚Рё, РЅРѕ РіР»СѓР±РѕРєРѕ РІРЅСѓС‚СЂРё РѕРґРёРЅРѕРє.",
+    currentPlan: "Р”РѕРєР°Р·Р°С‚СЊ СЃРІРѕСЋ РїСЂР°РІРѕС‚Сѓ РђР»РµРєСЃРµСЋ",
     memories: [
-      "Спор с Алексеем закончился ничем",
-      "Марина отвернулась при встрече",
-      "Вспомнил службу в армии",
+      "РЎРїРѕСЂ СЃ РђР»РµРєСЃРµРµРј Р·Р°РєРѕРЅС‡РёР»СЃСЏ РЅРёС‡РµРј",
+      "РњР°СЂРёРЅР° РѕС‚РІРµСЂРЅСѓР»Р°СЃСЊ РїСЂРё РІСЃС‚СЂРµС‡Рµ",
+      "Р’СЃРїРѕРјРЅРёР» СЃР»СѓР¶Р±Сѓ РІ Р°СЂРјРёРё",
     ],
   },
   {
     id: "agent-4",
-    name: "Елена",
-    avatar: "Е",
+    name: "Р•Р»РµРЅР°",
+    avatar: "Р•",
     mood: "excited",
-    traits: ["энергичная", "лидер", "эмпат"],
-    description: "Врач по профессии и миротворец по натуре. Старается помирить всех вокруг.",
-    currentPlan: "Организовать общий ужин для всех",
+    traits: ["СЌРЅРµСЂРіРёС‡РЅР°СЏ", "Р»РёРґРµСЂ", "СЌРјРїР°С‚"],
+    description: "Р’СЂР°С‡ РїРѕ РїСЂРѕС„РµСЃСЃРёРё Рё РјРёСЂРѕС‚РІРѕСЂРµС† РїРѕ РЅР°С‚СѓСЂРµ. РЎС‚Р°СЂР°РµС‚СЃСЏ РїРѕРјРёСЂРёС‚СЊ РІСЃРµС… РІРѕРєСЂСѓРі.",
+    currentPlan: "РћСЂРіР°РЅРёР·РѕРІР°С‚СЊ РѕР±С‰РёР№ СѓР¶РёРЅ РґР»СЏ РІСЃРµС…",
     memories: [
-      "Помогла незнакомцу на улице",
-      "Заметила напряжение между Виктором и Алексеем",
-      "Получила письмо от старого друга",
+      "РџРѕРјРѕРіР»Р° РЅРµР·РЅР°РєРѕРјС†Сѓ РЅР° СѓР»РёС†Рµ",
+      "Р—Р°РјРµС‚РёР»Р° РЅР°РїСЂСЏР¶РµРЅРёРµ РјРµР¶РґСѓ Р’РёРєС‚РѕСЂРѕРј Рё РђР»РµРєСЃРµРµРј",
+      "РџРѕР»СѓС‡РёР»Р° РїРёСЃСЊРјРѕ РѕС‚ СЃС‚Р°СЂРѕРіРѕ РґСЂСѓРіР°",
     ],
   },
   {
     id: "agent-5",
-    name: "Дмитрий",
-    avatar: "Д",
+    name: "Р”РјРёС‚СЂРёР№",
+    avatar: "Р”",
     mood: "sad",
-    traits: ["замкнутый", "умный", "меланхоличный"],
-    description: "Бывший учёный, потерял лабораторию в пожаре. Живёт на окраине и избегает людей.",
-    currentPlan: "Попытаться восстановить записи из сгоревшей лаборатории",
+    traits: ["Р·Р°РјРєРЅСѓС‚С‹Р№", "СѓРјРЅС‹Р№", "РјРµР»Р°РЅС…РѕР»РёС‡РЅС‹Р№"],
+    description: "Р‘С‹РІС€РёР№ СѓС‡С‘РЅС‹Р№, РїРѕС‚РµСЂСЏР» Р»Р°Р±РѕСЂР°С‚РѕСЂРёСЋ РІ РїРѕР¶Р°СЂРµ. Р–РёРІС‘С‚ РЅР° РѕРєСЂР°РёРЅРµ Рё РёР·Р±РµРіР°РµС‚ Р»СЋРґРµР№.",
+    currentPlan: "РџРѕРїС‹С‚Р°С‚СЊСЃСЏ РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃРё РёР· СЃРіРѕСЂРµРІС€РµР№ Р»Р°Р±РѕСЂР°С‚РѕСЂРёРё",
     memories: [
-      "Пожар уничтожил десять лет работы",
-      "Марина однажды принесла еду",
-      "Не доверяет Виктору",
+      "РџРѕР¶Р°СЂ СѓРЅРёС‡С‚РѕР¶РёР» РґРµСЃСЏС‚СЊ Р»РµС‚ СЂР°Р±РѕС‚С‹",
+      "РњР°СЂРёРЅР° РѕРґРЅР°Р¶РґС‹ РїСЂРёРЅРµСЃР»Р° РµРґСѓ",
+      "РќРµ РґРѕРІРµСЂСЏРµС‚ Р’РёРєС‚РѕСЂСѓ",
     ],
   },
   {
     id: "agent-6",
-    name: "Ольга",
-    avatar: "О",
+    name: "РћР»СЊРіР°",
+    avatar: "Рћ",
     mood: "anxious",
-    traits: ["осторожная", "наблюдательная", "скрытная"],
-    description: "Торговка на рынке. Знает все сплетни города, но сама держит много секретов.",
-    currentPlan: "Разузнать, что случилось на площади вчера ночью",
+    traits: ["РѕСЃС‚РѕСЂРѕР¶РЅР°СЏ", "РЅР°Р±Р»СЋРґР°С‚РµР»СЊРЅР°СЏ", "СЃРєСЂС‹С‚РЅР°СЏ"],
+    description: "РўРѕСЂРіРѕРІРєР° РЅР° СЂС‹РЅРєРµ. Р—РЅР°РµС‚ РІСЃРµ СЃРїР»РµС‚РЅРё РіРѕСЂРѕРґР°, РЅРѕ СЃР°РјР° РґРµСЂР¶РёС‚ РјРЅРѕРіРѕ СЃРµРєСЂРµС‚РѕРІ.",
+    currentPlan: "Р Р°Р·СѓР·РЅР°С‚СЊ, С‡С‚Рѕ СЃР»СѓС‡РёР»РѕСЃСЊ РЅР° РїР»РѕС‰Р°РґРё РІС‡РµСЂР° РЅРѕС‡СЊСЋ",
     memories: [
-      "Видела Виктора в переулке поздно ночью",
-      "Елена покупает у неё травы каждую неделю",
-      "Кто-то следит за ней -- уверена",
+      "Р’РёРґРµР»Р° Р’РёРєС‚РѕСЂР° РІ РїРµСЂРµСѓР»РєРµ РїРѕР·РґРЅРѕ РЅРѕС‡СЊСЋ",
+      "Р•Р»РµРЅР° РїРѕРєСѓРїР°РµС‚ Сѓ РЅРµС‘ С‚СЂР°РІС‹ РєР°Р¶РґСѓСЋ РЅРµРґРµР»СЋ",
+      "РљС‚Рѕ-С‚Рѕ СЃР»РµРґРёС‚ Р·Р° РЅРµР№ -- СѓРІРµСЂРµРЅР°",
     ],
   },
   {
     id: "agent-7",
-    name: "Игорь",
-    avatar: "И",
+    name: "РРіРѕСЂСЊ",
+    avatar: "Р",
     mood: "neutral",
-    traits: ["спокойный", "справедливый", "старомодный"],
-    description: "Пожилой сторож библиотеки. Видел многое, говорит мало, но когда говорит -- все слушают.",
-    currentPlan: "Присматривать за библиотекой и читать хроники",
+    traits: ["СЃРїРѕРєРѕР№РЅС‹Р№", "СЃРїСЂР°РІРµРґР»РёРІС‹Р№", "СЃС‚Р°СЂРѕРјРѕРґРЅС‹Р№"],
+    description: "РџРѕР¶РёР»РѕР№ СЃС‚РѕСЂРѕР¶ Р±РёР±Р»РёРѕС‚РµРєРё. Р’РёРґРµР» РјРЅРѕРіРѕРµ, РіРѕРІРѕСЂРёС‚ РјР°Р»Рѕ, РЅРѕ РєРѕРіРґР° РіРѕРІРѕСЂРёС‚ -- РІСЃРµ СЃР»СѓС€Р°СЋС‚.",
+    currentPlan: "РџСЂРёСЃРјР°С‚СЂРёРІР°С‚СЊ Р·Р° Р±РёР±Р»РёРѕС‚РµРєРѕР№ Рё С‡РёС‚Р°С‚СЊ С…СЂРѕРЅРёРєРё",
     memories: [
-      "Алексей часто приходит читать",
-      "Помнит, каким был город до войны",
-      "Не одобряет поведение Виктора",
+      "РђР»РµРєСЃРµР№ С‡Р°СЃС‚Рѕ РїСЂРёС…РѕРґРёС‚ С‡РёС‚Р°С‚СЊ",
+      "РџРѕРјРЅРёС‚, РєР°РєРёРј Р±С‹Р» РіРѕСЂРѕРґ РґРѕ РІРѕР№РЅС‹",
+      "РќРµ РѕРґРѕР±СЂСЏРµС‚ РїРѕРІРµРґРµРЅРёРµ Р’РёРєС‚РѕСЂР°",
     ],
   },
   {
     id: "agent-8",
-    name: "Настя",
-    avatar: "Н",
+    name: "РќР°СЃС‚СЏ",
+    avatar: "Рќ",
     mood: "happy",
-    traits: ["жизнерадостная", "наивная", "творческая"],
-    description: "Студентка-музыкант, недавно приехала в город. Ещё не знает местных интриг.",
-    currentPlan: "Найти место для репетиции и познакомиться с людьми",
+    traits: ["Р¶РёР·РЅРµСЂР°РґРѕСЃС‚РЅР°СЏ", "РЅР°РёРІРЅР°СЏ", "С‚РІРѕСЂС‡РµСЃРєР°СЏ"],
+    description: "РЎС‚СѓРґРµРЅС‚РєР°-РјСѓР·С‹РєР°РЅС‚, РЅРµРґР°РІРЅРѕ РїСЂРёРµС…Р°Р»Р° РІ РіРѕСЂРѕРґ. Р•С‰С‘ РЅРµ Р·РЅР°РµС‚ РјРµСЃС‚РЅС‹С… РёРЅС‚СЂРёРі.",
+    currentPlan: "РќР°Р№С‚Рё РјРµСЃС‚Рѕ РґР»СЏ СЂРµРїРµС‚РёС†РёРё Рё РїРѕР·РЅР°РєРѕРјРёС‚СЊСЃСЏ СЃ Р»СЋРґСЊРјРё",
     memories: [
-      "Город показался красивым, но странным",
-      "Марина улыбнулась ей на улице",
-      "Услышала громкий спор на площади",
+      "Р“РѕСЂРѕРґ РїРѕРєР°Р·Р°Р»СЃСЏ РєСЂР°СЃРёРІС‹Рј, РЅРѕ СЃС‚СЂР°РЅРЅС‹Рј",
+      "РњР°СЂРёРЅР° СѓР»С‹Р±РЅСѓР»Р°СЃСЊ РµР№ РЅР° СѓР»РёС†Рµ",
+      "РЈСЃР»С‹С€Р°Р»Р° РіСЂРѕРјРєРёР№ СЃРїРѕСЂ РЅР° РїР»РѕС‰Р°РґРё",
     ],
   },
 ]
@@ -177,129 +177,129 @@ export const MOCK_EVENTS: AgentEvent[] = [
   {
     id: "evt-1",
     agentId: "agent-1",
-    agentName: "Алексей",
+    agentName: "РђР»РµРєСЃРµР№",
     type: "chat",
-    text: "Привет, Марина! Как твоя новая картина?",
+    text: "РџСЂРёРІРµС‚, РњР°СЂРёРЅР°! РљР°Рє С‚РІРѕСЏ РЅРѕРІР°СЏ РєР°СЂС‚РёРЅР°?",
     timestamp: new Date(Date.now() - 300000).toISOString(),
   },
   {
     id: "evt-2",
     agentId: "agent-2",
-    agentName: "Марина",
+    agentName: "РњР°СЂРёРЅР°",
     type: "emotion",
-    text: "Почувствовала прилив вдохновения от заката",
+    text: "РџРѕС‡СѓРІСЃС‚РІРѕРІР°Р»Р° РїСЂРёР»РёРІ РІРґРѕС…РЅРѕРІРµРЅРёСЏ РѕС‚ Р·Р°РєР°С‚Р°",
     timestamp: new Date(Date.now() - 240000).toISOString(),
   },
   {
     id: "evt-3",
     agentId: "agent-3",
-    agentName: "Виктор",
+    agentName: "Р’РёРєС‚РѕСЂ",
     type: "action",
-    text: "Отправился на площадь, чтобы найти Алексея",
+    text: "РћС‚РїСЂР°РІРёР»СЃСЏ РЅР° РїР»РѕС‰Р°РґСЊ, С‡С‚РѕР±С‹ РЅР°Р№С‚Рё РђР»РµРєСЃРµСЏ",
     timestamp: new Date(Date.now() - 180000).toISOString(),
   },
   {
     id: "evt-4",
     agentId: "agent-4",
-    agentName: "Елена",
+    agentName: "Р•Р»РµРЅР°",
     type: "chat",
-    text: "Виктор, давай поговорим спокойно. Я уверена, вы с Алексеем найдёте общий язык.",
+    text: "Р’РёРєС‚РѕСЂ, РґР°РІР°Р№ РїРѕРіРѕРІРѕСЂРёРј СЃРїРѕРєРѕР№РЅРѕ. РЇ СѓРІРµСЂРµРЅР°, РІС‹ СЃ РђР»РµРєСЃРµРµРј РЅР°Р№РґС‘С‚Рµ РѕР±С‰РёР№ СЏР·С‹Рє.",
     timestamp: new Date(Date.now() - 120000).toISOString(),
   },
   {
     id: "evt-5",
     agentId: "agent-3",
-    agentName: "Виктор",
+    agentName: "Р’РёРєС‚РѕСЂ",
     type: "emotion",
-    text: "Раздражён: Елена снова лезет не в своё дело",
+    text: "Р Р°Р·РґСЂР°Р¶С‘РЅ: Р•Р»РµРЅР° СЃРЅРѕРІР° Р»РµР·РµС‚ РЅРµ РІ СЃРІРѕС‘ РґРµР»Рѕ",
     timestamp: new Date(Date.now() - 60000).toISOString(),
   },
   {
     id: "evt-6",
     agentId: "agent-1",
-    agentName: "Алексей",
+    agentName: "РђР»РµРєСЃРµР№",
     type: "action",
-    text: "Зашёл в библиотеку и нашёл интересную книгу об истории города",
+    text: "Р—Р°С€С‘Р» РІ Р±РёР±Р»РёРѕС‚РµРєСѓ Рё РЅР°С€С‘Р» РёРЅС‚РµСЂРµСЃРЅСѓСЋ РєРЅРёРіСѓ РѕР± РёСЃС‚РѕСЂРёРё РіРѕСЂРѕРґР°",
     timestamp: new Date(Date.now() - 30000).toISOString(),
   },
   {
     id: "evt-7",
     agentId: "agent-2",
-    agentName: "Марина",
+    agentName: "РњР°СЂРёРЅР°",
     type: "action",
-    text: "Поставила мольберт у реки и начала рисовать",
+    text: "РџРѕСЃС‚Р°РІРёР»Р° РјРѕР»СЊР±РµСЂС‚ Сѓ СЂРµРєРё Рё РЅР°С‡Р°Р»Р° СЂРёСЃРѕРІР°С‚СЊ",
     timestamp: new Date(Date.now() - 15000).toISOString(),
   },
   {
     id: "evt-8",
     agentId: "agent-4",
-    agentName: "Елена",
+    agentName: "Р•Р»РµРЅР°",
     type: "system",
-    text: "Решила организовать общий ужин сегодня вечером",
+    text: "Р РµС€РёР»Р° РѕСЂРіР°РЅРёР·РѕРІР°С‚СЊ РѕР±С‰РёР№ СѓР¶РёРЅ СЃРµРіРѕРґРЅСЏ РІРµС‡РµСЂРѕРј",
     timestamp: new Date(Date.now() - 5000).toISOString(),
   },
   {
     id: "evt-9",
     agentId: "agent-5",
-    agentName: "Дмитрий",
+    agentName: "Р”РјРёС‚СЂРёР№",
     type: "action",
-    text: "Нашёл обгоревший дневник среди руин лаборатории",
+    text: "РќР°С€С‘Р» РѕР±РіРѕСЂРµРІС€РёР№ РґРЅРµРІРЅРёРє СЃСЂРµРґРё СЂСѓРёРЅ Р»Р°Р±РѕСЂР°С‚РѕСЂРёРё",
     timestamp: new Date(Date.now() - 280000).toISOString(),
   },
   {
     id: "evt-10",
     agentId: "agent-6",
-    agentName: "Ольга",
+    agentName: "РћР»СЊРіР°",
     type: "emotion",
-    text: "Тревога нарастает -- кто-то определённо следит",
+    text: "РўСЂРµРІРѕРіР° РЅР°СЂР°СЃС‚Р°РµС‚ -- РєС‚Рѕ-С‚Рѕ РѕРїСЂРµРґРµР»С‘РЅРЅРѕ СЃР»РµРґРёС‚",
     timestamp: new Date(Date.now() - 200000).toISOString(),
   },
   {
     id: "evt-11",
     agentId: "agent-7",
-    agentName: "Игорь",
+    agentName: "РРіРѕСЂСЊ",
     type: "action",
-    text: "Открыл старый архив в подвале библиотеки",
+    text: "РћС‚РєСЂС‹Р» СЃС‚Р°СЂС‹Р№ Р°СЂС…РёРІ РІ РїРѕРґРІР°Р»Рµ Р±РёР±Р»РёРѕС‚РµРєРё",
     timestamp: new Date(Date.now() - 150000).toISOString(),
   },
   {
     id: "evt-12",
     agentId: "agent-8",
-    agentName: "Настя",
+    agentName: "РќР°СЃС‚СЏ",
     type: "chat",
-    text: "Простите, вы не подскажете, где тут можно порепетировать?",
+    text: "РџСЂРѕСЃС‚РёС‚Рµ, РІС‹ РЅРµ РїРѕРґСЃРєР°Р¶РµС‚Рµ, РіРґРµ С‚СѓС‚ РјРѕР¶РЅРѕ РїРѕСЂРµРїРµС‚РёСЂРѕРІР°С‚СЊ?",
     timestamp: new Date(Date.now() - 90000).toISOString(),
   },
 ]
 
 export const MOCK_RELATIONSHIPS: Relationship[] = [
-  // Алексей
-  { from: "agent-1", to: "agent-2", sentiment: 0.7, label: "дружба" },
-  { from: "agent-1", to: "agent-3", sentiment: -0.4, label: "конфликт" },
-  { from: "agent-1", to: "agent-7", sentiment: 0.4, label: "уважение" },
-  // Марина
-  { from: "agent-2", to: "agent-5", sentiment: 0.3, label: "сочувствие" },
-  { from: "agent-2", to: "agent-8", sentiment: 0.5, label: "симпатия" },
-  // Виктор
-  { from: "agent-3", to: "agent-4", sentiment: -0.2, label: "раздражение" },
-  { from: "agent-3", to: "agent-7", sentiment: -0.3, label: "неприязнь" },
-  // Елена
-  { from: "agent-4", to: "agent-6", sentiment: 0.4, label: "торговля" },
-  { from: "agent-4", to: "agent-1", sentiment: 0.5, label: "знакомые" },
-  // Ольга
-  { from: "agent-6", to: "agent-3", sentiment: -0.1, label: "подозрение" },
-  // Игорь -- одиночка, мало связей
-  // Настя -- новенькая, только одна связь
-  { from: "agent-8", to: "agent-1", sentiment: 0.2, label: "знакомые" },
-  // Дмитрий -- затворник, почти нет связей
-  { from: "agent-5", to: "agent-7", sentiment: 0.2, label: "соседи" },
+  // РђР»РµРєСЃРµР№
+  { from: "agent-1", to: "agent-2", sentiment: 0.7, label: "РґСЂСѓР¶Р±Р°" },
+  { from: "agent-1", to: "agent-3", sentiment: -0.4, label: "РєРѕРЅС„Р»РёРєС‚" },
+  { from: "agent-1", to: "agent-7", sentiment: 0.4, label: "СѓРІР°Р¶РµРЅРёРµ" },
+  // РњР°СЂРёРЅР°
+  { from: "agent-2", to: "agent-5", sentiment: 0.3, label: "СЃРѕС‡СѓРІСЃС‚РІРёРµ" },
+  { from: "agent-2", to: "agent-8", sentiment: 0.5, label: "СЃРёРјРїР°С‚РёСЏ" },
+  // Р’РёРєС‚РѕСЂ
+  { from: "agent-3", to: "agent-4", sentiment: -0.2, label: "СЂР°Р·РґСЂР°Р¶РµРЅРёРµ" },
+  { from: "agent-3", to: "agent-7", sentiment: -0.3, label: "РЅРµРїСЂРёСЏР·РЅСЊ" },
+  // Р•Р»РµРЅР°
+  { from: "agent-4", to: "agent-6", sentiment: 0.4, label: "С‚РѕСЂРіРѕРІР»СЏ" },
+  { from: "agent-4", to: "agent-1", sentiment: 0.5, label: "Р·РЅР°РєРѕРјС‹Рµ" },
+  // РћР»СЊРіР°
+  { from: "agent-6", to: "agent-3", sentiment: -0.1, label: "РїРѕРґРѕР·СЂРµРЅРёРµ" },
+  // РРіРѕСЂСЊ -- РѕРґРёРЅРѕС‡РєР°, РјР°Р»Рѕ СЃРІСЏР·РµР№
+  // РќР°СЃС‚СЏ -- РЅРѕРІРµРЅСЊРєР°СЏ, С‚РѕР»СЊРєРѕ РѕРґРЅР° СЃРІСЏР·СЊ
+  { from: "agent-8", to: "agent-1", sentiment: 0.2, label: "Р·РЅР°РєРѕРјС‹Рµ" },
+  // Р”РјРёС‚СЂРёР№ -- Р·Р°С‚РІРѕСЂРЅРёРє, РїРѕС‡С‚Рё РЅРµС‚ СЃРІСЏР·РµР№
+  { from: "agent-5", to: "agent-7", sentiment: 0.2, label: "СЃРѕСЃРµРґРё" },
 ]
 
 export const MOCK_STATS: WorldStats = {
   totalEvents: 847,
   totalConversations: 234,
   avgMood: 0.62,
-  mostActiveAgent: "Алексей",
+  mostActiveAgent: "РђР»РµРєСЃРµР№",
   topRelationship: { from: "agent-1", to: "agent-2", sentiment: 0.7 },
   eventsByType: [
     { type: "chat", count: 312 },
@@ -317,7 +317,7 @@ export const MOCK_STATS: WorldStats = {
   ],
 }
 
-// ===== ДОСТУП К ДАННЫМ (замени на реальные запросы) =====
+// ===== Р”РћРЎРўРЈРџ Рљ Р”РђРќРќР«Рњ (Р·Р°РјРµРЅРё РЅР° СЂРµР°Р»СЊРЅС‹Рµ Р·Р°РїСЂРѕСЃС‹) =====
 
 interface BackendPersonalityTraits {
   openness?: number
@@ -329,19 +329,48 @@ interface BackendPersonalityTraits {
 
 interface BackendAgentDto {
   agentId: string
+  userId: string
   name: string
   model: string
   status: string
   state: string
   energy: number
   personalityTraits?: BackendPersonalityTraits
+  description?: string
+  emotion?: string
+  traits?: string[]
+  memories?: string[]
+  currentPlan?: string
 }
 
 interface BackendEventDto {
   id: string
+  userId?: string
   type: string
   payload: unknown
   createdAt: string
+}
+
+interface BackendRelationshipDto {
+  from: string
+  to: string
+  sentiment: number
+  label?: string
+}
+
+interface BackendWorldStatsDto {
+  totalEvents: number
+  totalConversations: number
+  avgMood: number
+  mostActiveAgent: string
+  topRelationship: { from: string; to: string; sentiment: number }
+  eventsByType: { type: string; count: number }[]
+  moodDistribution: { mood: string; count: number }[]
+}
+
+interface BackendWorldTimeDto {
+  gameTime: string
+  speed: number
 }
 
 const BACKEND_API_BASE = "/api/backend"
@@ -373,9 +402,16 @@ async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T
 }
 
-function toMood(status: string, energyRaw: number): Mood {
+function toMood(status: string, energyRaw: number, emotionRaw?: string): Mood {
   const statusLower = status.toLowerCase()
+  const emotion = emotionRaw?.trim().toLowerCase() ?? ""
   const energy = Number.isFinite(energyRaw) ? Math.max(0, Math.min(1, energyRaw)) : 0.5
+
+  if (emotion.includes("СЂР°РґРѕСЃС‚") || emotion.includes("СЃС‡Р°СЃС‚") || emotion.includes("РІРґРѕС…РЅРѕРІ") || emotion.includes("РІРѕРѕРґСѓС€")) return "happy"
+  if (emotion.includes("СЃРїРѕРєРѕР№") || emotion.includes("РЅРµР№С‚СЂР°Р»")) return "neutral"
+  if (emotion.includes("СѓСЃС‚Р°Р»") || emotion.includes("РіСЂСѓСЃС‚")) return "sad"
+  if (emotion.includes("СЂР°Р·РґСЂР°Р¶") || emotion.includes("Р·Р»")) return "angry"
+  if (emotion.includes("С‚СЂРµРІРѕРі") || emotion.includes("РЅР°РїСЂСЏР¶")) return "anxious"
 
   if (statusLower.includes("error") || statusLower.includes("failed")) return "angry"
   if (statusLower.includes("stop") || statusLower.includes("archived")) return "sad"
@@ -387,7 +423,11 @@ function toMood(status: string, energyRaw: number): Mood {
   return "sad"
 }
 
-function toTraits(traits?: BackendPersonalityTraits): string[] {
+function toTraits(traits?: BackendPersonalityTraits, explicitTraits?: string[]): string[] {
+  if (explicitTraits && explicitTraits.length > 0) {
+    return explicitTraits.slice(0, 8)
+  }
+
   if (!traits) return ["adaptive"]
 
   const labels: Array<{ key: keyof BackendPersonalityTraits; label: string }> = [
@@ -409,16 +449,23 @@ function toTraits(traits?: BackendPersonalityTraits): string[] {
 }
 
 function mapBackendAgent(agent: BackendAgentDto): Agent {
-  const mood = toMood(agent.status, agent.energy)
+  const mood = toMood(agent.status, agent.energy, agent.emotion)
+  const traits = toTraits(agent.personalityTraits, agent.traits)
+  const memories =
+    agent.memories && agent.memories.length > 0
+      ? agent.memories
+      : agent.state
+        ? [`Current state: ${agent.state}`]
+        : []
   return {
     id: agent.agentId,
     name: agent.name,
     avatar: agent.name?.trim()?.charAt(0)?.toUpperCase() || "?",
     mood,
-    traits: toTraits(agent.personalityTraits),
-    description: `${agent.model} • status: ${agent.status}`,
-    currentPlan: agent.state || "No current plan",
-    memories: agent.state ? [`Current state: ${agent.state}`] : [],
+    traits,
+    description: agent.description?.trim() || `${agent.model} • status: ${agent.status}`,
+    currentPlan: agent.currentPlan?.trim() || agent.state || "No current plan",
+    memories,
   }
 }
 
@@ -582,6 +629,35 @@ function buildStats(agents: Agent[], events: AgentEvent[], relationships: Relati
   }
 }
 
+function normalizeMood(rawMood: string): Mood {
+  const mood = rawMood.trim().toLowerCase()
+  if (mood === "happy" || mood === "neutral" || mood === "sad" || mood === "angry" || mood === "excited" || mood === "anxious") {
+    return mood
+  }
+
+  return "neutral"
+}
+
+function mapBackendStats(stats: BackendWorldStatsDto): WorldStats {
+  return {
+    totalEvents: stats.totalEvents,
+    totalConversations: stats.totalConversations,
+    avgMood: stats.avgMood,
+    mostActiveAgent: stats.mostActiveAgent,
+    topRelationship: stats.topRelationship,
+    eventsByType: stats.eventsByType,
+    moodDistribution: stats.moodDistribution.map((item) => ({
+      mood: normalizeMood(item.mood),
+      count: item.count,
+    })),
+  }
+}
+
+export interface WorldTime {
+  gameTime: string
+  speed: number
+}
+
 export async function addEvent(text: string): Promise<boolean> {
   const payload = {
     type: "ui.note",
@@ -664,8 +740,13 @@ export async function getEvents(): Promise<AgentEvent[]> {
 
 export async function getRelationships(): Promise<Relationship[]> {
   try {
-    const [agents, events] = await Promise.all([getAgents(), getEvents()])
-    return buildRelationshipsFromEvents(events, agents)
+    const relationships = await backendRequest<BackendRelationshipDto[]>("/api/relationships")
+    return relationships.map((relationship) => ({
+      from: relationship.from,
+      to: relationship.to,
+      sentiment: relationship.sentiment,
+      label: relationship.label ?? "interaction",
+    }))
   } catch (error) {
     console.warn("[data] getRelationships fallback to mock", error)
     return MOCK_RELATIONSHIPS
@@ -674,14 +755,57 @@ export async function getRelationships(): Promise<Relationship[]> {
 
 export async function getStats(): Promise<WorldStats> {
   try {
-    const [agents, events, relationships] = await Promise.all([
-      getAgents(),
-      getEvents(),
-      getRelationships(),
-    ])
-    return buildStats(agents, events, relationships)
+    const stats = await backendRequest<BackendWorldStatsDto>("/api/stats")
+    return mapBackendStats(stats)
   } catch (error) {
     console.warn("[data] getStats fallback to mock", error)
     return MOCK_STATS
   }
 }
+
+export async function getWorldTime(): Promise<WorldTime | null> {
+  try {
+    const worldTime = await backendRequest<BackendWorldTimeDto>("/api/world/time")
+    return {
+      gameTime: worldTime.gameTime,
+      speed: worldTime.speed,
+    }
+  } catch (error) {
+    console.warn("[data] getWorldTime failed", error)
+    return null
+  }
+}
+
+export async function setWorldTimeSpeed(speed: number): Promise<WorldTime | null> {
+  try {
+    const updated = await backendRequest<BackendWorldTimeDto>("/api/world/time/speed", {
+      method: "POST",
+      body: JSON.stringify({ speed }),
+    })
+    return {
+      gameTime: updated.gameTime,
+      speed: updated.speed,
+    }
+  } catch (error) {
+    console.warn("[data] setWorldTimeSpeed failed", error)
+    return null
+  }
+}
+
+export async function advanceWorldTime(minutes: number): Promise<WorldTime | null> {
+  try {
+    const updated = await backendRequest<BackendWorldTimeDto>("/api/world/time/advance", {
+      method: "POST",
+      body: JSON.stringify({ minutes }),
+    })
+    return {
+      gameTime: updated.gameTime,
+      speed: updated.speed,
+    }
+  } catch (error) {
+    console.warn("[data] advanceWorldTime failed", error)
+    return null
+  }
+}
+
+

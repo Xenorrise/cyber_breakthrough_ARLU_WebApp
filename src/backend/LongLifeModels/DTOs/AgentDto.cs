@@ -15,4 +15,9 @@ public sealed class AgentDto
     public required DateTimeOffset CreatedAt { get; init; }
     public required DateTimeOffset LastActiveAt { get; init; }
     public required PersonalityTraits PersonalityTraits { get; init; }
+    public string? Description { get; init; }
+    public string? Emotion { get; init; }
+    public IReadOnlyCollection<string>? Traits { get; init; }
+    public IReadOnlyCollection<string>? Memories { get; init; }
+    public string? CurrentPlan { get; init; }
 }

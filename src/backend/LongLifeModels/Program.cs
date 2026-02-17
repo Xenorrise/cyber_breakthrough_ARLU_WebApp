@@ -61,12 +61,14 @@ builder.Services.AddScoped<IUserAgentsService, UserAgentsService>();
 builder.Services.AddScoped<IWorldInsightsService, WorldInsightsService>();
 builder.Services.AddScoped<ITickProcessor, TickProcessor>();
 builder.Services.AddSingleton<IEventService, InMemoryEventService>();
+builder.Services.AddSingleton<IWorldSimulationService, WorldSimulationService>();
 builder.Services.AddSingleton<IAgentCommandQueue, InMemoryAgentCommandQueue>();
 builder.Services.AddSingleton<IUserContextService, UserContextService>();
 builder.Services.AddSingleton<IAgentRealtimeNotifier, SignalRAgentRealtimeNotifier>();
 
 builder.Services.AddHostedService<QdrantCollectionInitializer>();
 builder.Services.AddHostedService<AgentCommandWorker>();
+builder.Services.AddHostedService<WorldSimulationWorker>();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();

@@ -13,8 +13,17 @@ public sealed class CreateAgentRequestDto
     [MaxLength(120)]
     public string? Model { get; init; }
 
-    [MaxLength(120)]
+    [MaxLength(400)]
     public string? InitialState { get; init; }
+
+    [MaxLength(1000)]
+    public string? Description { get; init; }
+
+    [MaxLength(80)]
+    public string? InitialEmotion { get; init; }
+
+    [MaxLength(500)]
+    public string? TraitSummary { get; init; }
 
     [Range(0f, 1f)]
     public float InitialEnergy { get; init; } = 0.8f;

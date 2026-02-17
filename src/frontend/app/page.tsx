@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CyberFrame, type TabId } from "@/components/cyber-frame"
 import { GraphPanel } from "@/components/panels/graph-panel"
 import { EventsPanel } from "@/components/panels/events-panel"
 import { AgentsPanel } from "@/components/panels/agents-panel"
 import { StatsPanel } from "@/components/panels/stats-panel"
 import { MessagesPanel } from "@/components/panels/messages-panel"
-import { addEvent } from "@/lib/data"
+import { addEvent, getWorldTime, setWorldTimeSpeed } from "@/lib/data"
 
 /**
  * Главная. activeTab -- активная вкладка.
@@ -17,9 +17,39 @@ import { addEvent } from "@/lib/data"
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("graph")
   const [timeSpeed, setTimeSpeed] = useState(1)
+  const [worldTime, setWorldTime] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [sourceTab, setSourceTab] = useState<TabId | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
+
+  useEffect(() => {
+    let active = true
+
+    const syncWorldTime = async () => {
+      const current = await getWorldTime()
+      if (!current || !active) {
+        return
+      }
+
+      setTimeSpeed(current.speed)
+      setWorldTime(current.gameTime)
+    }
+
+    void syncWorldTime()
+    const timer = setInterval(syncWorldTime, 1500)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRefreshToken((prev) => prev + 1)
+    }, 3000)
+
+    return () => clearInterval(timer)
+  }, [])
 
   const handleAddEvent = async (text: string) => {
     const saved = await addEvent(text)
@@ -28,6 +58,18 @@ export default function Home() {
       return
     }
 
+    setRefreshToken((prev) => prev + 1)
+  }
+
+  const handleTimeSpeedChange = async (speed: number) => {
+    setTimeSpeed(speed)
+    const updated = await setWorldTimeSpeed(speed)
+    if (!updated) {
+      return
+    }
+
+    setTimeSpeed(updated.speed)
+    setWorldTime(updated.gameTime)
     setRefreshToken((prev) => prev + 1)
   }
 
@@ -84,7 +126,8 @@ export default function Home() {
       onTabChange={handleTabChange}
       onAddEvent={handleAddEvent}
       timeSpeed={timeSpeed}
-      onTimeSpeedChange={setTimeSpeed}
+      onTimeSpeedChange={handleTimeSpeedChange}
+      worldTime={worldTime}
     >
       {renderContent()}
     </CyberFrame>

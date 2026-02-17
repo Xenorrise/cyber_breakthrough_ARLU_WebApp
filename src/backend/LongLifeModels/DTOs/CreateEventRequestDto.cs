@@ -13,6 +13,8 @@ public sealed class CreateEventRequestDto : IValidatableObject
     [Required]
     public JsonElement Payload { get; init; }
 
+    public DateTimeOffset? OccurredAt { get; init; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (Payload.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)

@@ -13,6 +13,7 @@ public sealed class UserAgentsService(
     AgentDbContext dbContext,
     IAgentCommandQueue commandQueue,
     IAgentRealtimeNotifier realtimeNotifier,
+    IWorldSimulationService worldSimulationService,
     ILLMService llmService,
     IOptions<OpenAIOptions> openAiOptions,
     ILogger<UserAgentsService> logger) : IUserAgentsService
@@ -23,7 +24,10 @@ public sealed class UserAgentsService(
         Return ONLY a JSON object with this exact schema:
         {
           "name": "string, max 120 chars",
-          "initialState": "string, max 120 chars",
+          "initialState": "string, max 400 chars",
+          "description": "string, max 1000 chars",
+          "initialEmotion": "string, max 80 chars",
+          "traitSummary": "comma-separated traits, max 500 chars",
           "initialEnergy": "number from 0 to 1",
           "personalityTraits": {
             "openness": "number from 0 to 1",
@@ -47,6 +51,9 @@ public sealed class UserAgentsService(
             Model = string.IsNullOrWhiteSpace(request.Model) ? openAiOptions.Value.ChatModel : request.Model.Trim(),
             Status = AgentStatuses.Creating,
             State = string.IsNullOrWhiteSpace(request.InitialState) ? "Ready" : request.InitialState.Trim(),
+            Description = string.IsNullOrWhiteSpace(request.Description) ? "Generated simulation agent." : request.Description.Trim(),
+            CurrentEmotion = NormalizeEmotion(request.InitialEmotion),
+            TraitSummary = NormalizeTraitSummary(request.TraitSummary),
             Energy = request.InitialEnergy,
             ThreadId = Guid.NewGuid(),
             CreatedAt = now,
@@ -85,7 +92,10 @@ public sealed class UserAgentsService(
         {
             Name = NormalizeName(blueprint.Name),
             Model = string.IsNullOrWhiteSpace(request.Model) ? null : request.Model.Trim(),
-            InitialState = NormalizeText(blueprint.InitialState ?? blueprint.State, maxLength: 120),
+            InitialState = NormalizeText(blueprint.InitialState ?? blueprint.State, maxLength: 400),
+            Description = NormalizeText(blueprint.Description, maxLength: 1000),
+            InitialEmotion = NormalizeText(blueprint.InitialEmotion, maxLength: 80),
+            TraitSummary = NormalizeText(blueprint.TraitSummary, maxLength: 500),
             InitialEnergy = NormalizeScore(blueprint.InitialEnergy ?? blueprint.Energy ?? 0.8f),
             PersonalityTraits = NormalizeTraits(blueprint.PersonalityTraits ?? blueprint.Traits)
         };
@@ -100,24 +110,43 @@ public sealed class UserAgentsService(
 
     public async Task<IReadOnlyCollection<AgentDto>> GetAgentsAsync(string userId, CancellationToken cancellationToken)
     {
+        await worldSimulationService.EnsureUserWorldAsync(userId, cancellationToken);
+
         var agents = await dbContext.Agents
             .Where(x => x.UserId == userId && !x.IsArchived)
             .OrderByDescending(x => x.LastActiveAt)
             .ToArrayAsync(cancellationToken);
 
-        return agents.Select(ToAgentDto).ToArray();
+        var memoriesByAgent = await LoadRecentMemoriesByAgentAsync(agents.Select(x => x.Id), cancellationToken);
+        return agents.Select(agent => ToAgentDto(agent, memoriesByAgent.GetValueOrDefault(agent.Id))).ToArray();
     }
 
     public async Task<AgentDto?> GetAgentAsync(string userId, Guid agentId, CancellationToken cancellationToken)
     {
+        await worldSimulationService.EnsureUserWorldAsync(userId, cancellationToken);
+
         var agent = await dbContext.Agents
             .FirstOrDefaultAsync(x => x.Id == agentId && x.UserId == userId && !x.IsArchived, cancellationToken);
 
-        return agent is null ? null : ToAgentDto(agent);
+        if (agent is null)
+        {
+            return null;
+        }
+
+        var memories = await dbContext.MemoryLogs
+            .Where(x => x.AgentId == agent.Id)
+            .OrderByDescending(x => x.Timestamp)
+            .Take(5)
+            .Select(x => x.Description)
+            .ToArrayAsync(cancellationToken);
+
+        return ToAgentDto(agent, memories);
     }
 
     public async Task<PagedResultDto<AgentMessageDto>> GetMessagesAsync(string userId, Guid agentId, int limit, CancellationToken cancellationToken)
     {
+        await worldSimulationService.EnsureUserWorldAsync(userId, cancellationToken);
+
         var agent = await RequireOwnedAgentAsync(userId, agentId, cancellationToken);
         var safeLimit = Math.Clamp(limit, 1, 200);
         var items = await dbContext.AgentMessages
@@ -291,12 +320,12 @@ public sealed class UserAgentsService(
             return "Updated";
         }
 
-        return nextState.Length <= 120
+        return nextState.Length <= 400
             ? nextState
-            : nextState[..120];
+            : nextState[..400];
     }
 
-    private static AgentDto ToAgentDto(Agent agent)
+    private static AgentDto ToAgentDto(Agent agent, IReadOnlyCollection<string>? memories = null)
         => new()
         {
             AgentId = agent.Id,
@@ -309,7 +338,12 @@ public sealed class UserAgentsService(
             ThreadId = agent.ThreadId,
             CreatedAt = agent.CreatedAt,
             LastActiveAt = agent.LastActiveAt,
-            PersonalityTraits = agent.PersonalityTraits
+            PersonalityTraits = agent.PersonalityTraits,
+            Description = string.IsNullOrWhiteSpace(agent.Description) ? null : agent.Description,
+            Emotion = string.IsNullOrWhiteSpace(agent.CurrentEmotion) ? null : agent.CurrentEmotion,
+            Traits = ParseTraits(agent.TraitSummary),
+            Memories = memories?.ToArray(),
+            CurrentPlan = agent.State
         };
 
     private static AgentStatusDto ToStatusDto(Agent agent)
@@ -435,9 +469,72 @@ public sealed class UserAgentsService(
         public string? Name { get; init; }
         public string? InitialState { get; init; }
         public string? State { get; init; }
+        public string? Description { get; init; }
+        public string? InitialEmotion { get; init; }
+        public string? TraitSummary { get; init; }
         public float? InitialEnergy { get; init; }
         public float? Energy { get; init; }
         public PersonalityTraits? PersonalityTraits { get; init; }
         public PersonalityTraits? Traits { get; init; }
+    }
+
+    private async Task<Dictionary<Guid, IReadOnlyCollection<string>>> LoadRecentMemoriesByAgentAsync(
+        IEnumerable<Guid> agentIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = agentIds.Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return [];
+        }
+
+        var items = await dbContext.MemoryLogs
+            .Where(x => ids.Contains(x.AgentId))
+            .OrderByDescending(x => x.Timestamp)
+            .ToArrayAsync(cancellationToken);
+
+        return items
+            .GroupBy(x => x.AgentId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyCollection<string>)group
+                    .Take(5)
+                    .Select(x => x.Description)
+                    .ToArray());
+    }
+
+    private static IReadOnlyCollection<string>? ParseTraits(string traitSummary)
+    {
+        if (string.IsNullOrWhiteSpace(traitSummary))
+        {
+            return null;
+        }
+
+        return traitSummary
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Take(8)
+            .ToArray();
+    }
+
+    private static string NormalizeEmotion(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "neutral";
+        }
+
+        var trimmed = raw.Trim();
+        return trimmed.Length <= 80 ? trimmed : trimmed[..80];
+    }
+
+    private static string NormalizeTraitSummary(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = raw.Trim();
+        return trimmed.Length <= 500 ? trimmed : trimmed[..500];
     }
 }

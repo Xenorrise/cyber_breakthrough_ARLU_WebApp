@@ -189,7 +189,7 @@ public sealed class WorldInsightsService(
         CancellationToken cancellationToken)
     {
         var agentsTask = userAgentsService.GetAgentsAsync(userId, cancellationToken);
-        var eventsTask = eventService.GetAllAsync(cancellationToken);
+        var eventsTask = eventService.GetAllAsync(userId, cancellationToken);
         await Task.WhenAll(agentsTask, eventsTask);
         return (await agentsTask, await eventsTask);
     }

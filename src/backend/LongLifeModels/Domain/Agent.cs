@@ -8,6 +8,9 @@ public sealed class Agent
     public string Model { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string CurrentEmotion { get; set; } = "neutral";
+    public string TraitSummary { get; set; } = string.Empty;
     public float Energy { get; set; }
     public Guid ThreadId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
