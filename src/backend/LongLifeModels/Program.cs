@@ -123,33 +123,38 @@ static string ResolveQdrantBaseUrl(string configuredBaseUrl)
         return configuredBaseUrl;
     }
 
+    static string BuildWithHost(Uri source, string host, int? forcePort = null)
+    {
+        var builder = new UriBuilder(source)
+        {
+            Host = host,
+            Port = forcePort ?? (source.IsDefaultPort ? -1 : source.Port)
+        };
+
+        return builder.Uri.ToString().TrimEnd('/');
+    }
+
     var isLocalhost = string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
         || string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
 
     if (!isLocalhost)
     {
+        var isHostGateway = string.Equals(uri.Host, "host.docker.internal", StringComparison.OrdinalIgnoreCase);
+        if (isHostGateway && CanResolveHost("qdrant"))
+        {
+            return BuildWithHost(uri, "qdrant", 6333);
+        }
+
         var isQdrantAlias = string.Equals(uri.Host, "qdrant", StringComparison.OrdinalIgnoreCase);
         if (!isQdrantAlias || CanResolveHost(uri.Host))
         {
             return configuredBaseUrl;
         }
 
-        var hostGatewayBuilder = new UriBuilder(uri)
-        {
-            Host = "host.docker.internal",
-            Port = uri.IsDefaultPort ? 6333 : uri.Port
-        };
-
-        return hostGatewayBuilder.Uri.ToString().TrimEnd('/');
+        return BuildWithHost(uri, "host.docker.internal", uri.IsDefaultPort ? 6333 : uri.Port);
     }
 
-    var builder = new UriBuilder(uri)
-    {
-        Host = "qdrant",
-        Port = 6333
-    };
-
-    return builder.Uri.ToString().TrimEnd('/');
+    return BuildWithHost(uri, "qdrant", 6333);
 }
 
 static bool CanResolveHost(string host)
