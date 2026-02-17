@@ -212,6 +212,20 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
     fg.d3ReheatSimulation()
   }, [graphLoaded])
 
+  // Обработать изменение размера (fullscreen toggle) -- центрировать и прогреть физику
+  useEffect(() => {
+    const fg = fgRef.current
+    if (!fg || !graphLoaded || dimensions.width === 0) return
+    
+    // Небольшая задержка чтобы canvas успел обновиться
+    const timer = setTimeout(() => {
+      fg.zoomToFit(400, 40)
+      fg.d3ReheatSimulation()
+    }, 100)
+    
+    return () => clearTimeout(timer)
+  }, [dimensions, graphLoaded])
+
   // Paint node -- minimal, consistent stroke width
   const paintNode = useCallback(
     (node: Record<string, unknown>, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -262,6 +276,7 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
     [hoveredNode]
   )
 
+  // Paint link -- uniform width, no labels on canvas
   const paintLink = useCallback(
     (link: Record<string, unknown>, ctx: CanvasRenderingContext2D) => {
       const l = link as unknown as GraphLink
@@ -282,7 +297,7 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
     []
   )
 
-  // Показать отношения при наведении
+  // Tooltip content -- shows relationships when hovering
   const tooltipContent = useMemo(() => {
     if (!hoveredNode) return null
     const agent = MOCK_AGENTS.find((a) => a.id === hoveredNode.id)
@@ -300,7 +315,7 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
     return { agent, moodCfg, rels }
   }, [hoveredNode])
 
-  // Клик по узлу
+  // Node click -- navigate to agent profile
   const handleNodeClick = useCallback(
     (node: Record<string, unknown>) => {
       const n = node as unknown as GraphNode
@@ -311,7 +326,7 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
     [onSelectAgent]
   )
 
-  // Перенос узлов
+  // Drag -- temporary pin, release back to physics after drag end
   const handleNodeDrag = useCallback((node: Record<string, unknown>) => {
     const n = node as unknown as GraphNode
     n.__dragging = true
@@ -322,7 +337,7 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
   const handleNodeDragEnd = useCallback((node: Record<string, unknown>) => {
     const n = node as unknown as GraphNode
     n.__dragging = false
-    // Возврат на место
+    // Release back to physics after a short delay
     setTimeout(() => {
       if (!n.__dragging) {
         n.fx = undefined as unknown as null
@@ -362,21 +377,25 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
           width={dimensions.width}
           height={dimensions.height}
           backgroundColor="transparent"
-          // Физика
+          // Physics: never stop
           d3AlphaDecay={0.005}
           d3VelocityDecay={0.25}
           warmupTicks={0}
           cooldownTime={Infinity}
-          // Узлы
+          // Nodes
           nodeCanvasObject={paintNode}
           nodePointerAreaPaint={(node: Record<string, unknown>, color: string, ctx: CanvasRenderingContext2D) => {
             const n = node as unknown as GraphNode
-            ctx.beginPath()
-            ctx.arc(n.x ?? 0, n.y ?? 0, 20, 0, 2 * Math.PI)
+            const x = n.x ?? 0
+            const y = n.y ?? 0
+            // Увеличенная зона клика для Firefox
             ctx.fillStyle = color
+            ctx.beginPath()
+            ctx.arc(x, y, 22, 0, 2 * Math.PI)
             ctx.fill()
           }}
           nodeLabel={() => ""}
+          nodeVal={() => 1}
           onNodeHover={(node: Record<string, unknown> | null) => {
             setHoveredNode(node ? (node as unknown as GraphNode) : null)
             if (containerRef.current) {
@@ -387,9 +406,10 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
           onNodeDrag={handleNodeDrag}
           onNodeDragEnd={handleNodeDragEnd}
           enableNodeDrag={true}
-          // Ссылки
+          // Связи
           linkCanvasObject={paintLink}
           linkDirectionalParticles={0}
+          linkPointerAreaPaint={() => {}}
           // Навигация
           enableZoomInteraction={true}
           enablePanInteraction={true}
@@ -398,7 +418,7 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
         />
       )}
 
-      {/* Лейбл с информацией при наведении на нод */}
+      {/* Tooltip -- only on hover, disappears immediately on leave */}
       {hoveredNode && tooltipContent && (
         <div
           className="absolute z-40 pointer-events-none font-mono"

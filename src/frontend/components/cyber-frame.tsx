@@ -29,12 +29,14 @@ export function CyberFrame({
   timeSpeed?: number
   onTimeSpeedChange?: (speed: number) => void
 }) {
-  const [time, setTime] = useState("")
-  const [date, setDate] = useState("")
+  const [time, setTime] = useState("--:--:--")
+  const [date, setDate] = useState("--.--.----")
   const [eventText, setEventText] = useState("")
   const [speedHover, setSpeedHover] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const tick = () => {
       const now = new Date()
       setTime(
@@ -280,7 +282,7 @@ export function CyberFrame({
               <button
                 onClick={() => onTimeSpeedChange?.(DEFAULT_SPEED)}
                 className="font-mono text-sm tabular-nums cursor-pointer"
-                title={"Клик = сброс на " + DEFAULT_SPEED + "x"}
+                title={mounted ? `Клик = сброс на ${DEFAULT_SPEED}x` : undefined}
                 style={{
                   color: "var(--cyber-glow)",
                   textShadow: timeSpeed > 0 ? "0 0 8px rgba(229,195,75,0.4)" : "none",

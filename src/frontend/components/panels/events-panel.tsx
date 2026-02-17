@@ -99,7 +99,7 @@ export function EventsPanel() {
                   e.currentTarget.style.backgroundColor = "rgba(229,195,75,0.02)"
                 }}
               >
-                {/* Время */}
+                {/* Timestamp */}
                 <span
                   className="shrink-0 font-mono text-[11px] tabular-nums pt-0.5"
                   style={{ color: "var(--muted-foreground)", width: "64px" }}
@@ -107,7 +107,7 @@ export function EventsPanel() {
                   {formatTime(evt.timestamp)}
                 </span>
 
-                {/* Тип */}
+                {/* Type badge */}
                 <span
                   className="shrink-0 font-mono text-[9px] tracking-wider uppercase px-1.5 py-0.5 rounded-sm mt-0.5"
                   style={{
@@ -119,7 +119,7 @@ export function EventsPanel() {
                   {typeConf.label}
                 </span>
 
-                {/* Контент */}
+                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <span className="font-mono text-xs font-bold mr-2" style={{ color: "var(--cyber-glow)" }}>
                     {evt.agentName}
