@@ -20,7 +20,7 @@ export default function Home() {
 
   const handleAddEvent = (text: string) => {
     // Пока просто выводим в консоль.
-    // На шаге 6 (SignalR) это будет отправляться на бэкенд.
+    // После добавления SignalR будет отправляться на бэкенд.
     console.log("[v0] Новое событие:", text)
   }
 

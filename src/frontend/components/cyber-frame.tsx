@@ -30,6 +30,7 @@ export function CyberFrame({
   onTimeSpeedChange?: (speed: number) => void
 }) {
   const [time, setTime] = useState("")
+  const [date, setDate] = useState("")
   const [eventText, setEventText] = useState("")
   const [speedHover, setSpeedHover] = useState(false)
 
@@ -41,6 +42,13 @@ export function CyberFrame({
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
+        })
+      )
+      setDate(
+        now.toLocaleDateString("ru-RU", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
         })
       )
     }
@@ -56,8 +64,16 @@ export function CyberFrame({
     }
   }
 
+  /* percentage-based paddings: 1.2% top/bottom, 1.5% sides -- scales with any screen */
+  const framePad = {
+    padding: "1.2% 1.8%",
+  }
+
   return (
-    <div className="relative h-screen w-screen bg-background overflow-hidden flex flex-col">
+    <div
+      className="relative w-screen overflow-hidden flex flex-col"
+      style={{ height: "100dvh", backgroundColor: "var(--background)" }}
+    >
       {/* Scanline overlay */}
       <div
         className="pointer-events-none absolute inset-0 z-50"
@@ -67,24 +83,24 @@ export function CyberFrame({
         }}
       />
 
-      {/* SVG frame */}
+      {/* ========== SVG frame (desktop) ========== */}
       <svg
-        className="pointer-events-none absolute inset-0 z-40 h-full w-full"
-        viewBox="0 0 1920 1080"
+        className="pointer-events-none absolute inset-0 z-40 hidden md:block"
+        style={{ width: "100%", height: "100%" }}
+        viewBox="0 0 1000 1000"
         preserveAspectRatio="none"
         fill="none"
-        xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
           <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feGaussianBlur stdDeviation="2" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
           <filter id="glow-strong">
-            <feGaussianBlur stdDeviation="6" result="blur" />
+            <feGaussianBlur stdDeviation="4" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -94,60 +110,49 @@ export function CyberFrame({
 
         {/* Main border */}
         <path
-          d={`
-            M 80 20
-            L 1840 20
-            L 1900 80
-            L 1900 1000
-            L 1840 1060
-            L 80 1060
-            L 20 1000
-            L 20 80
-            Z
-          `}
+          d="M 30 6 L 970 6 L 994 30 L 994 970 L 970 994 L 30 994 L 6 970 L 6 30 Z"
           stroke="var(--cyber-glow)"
-          strokeWidth="2"
+          strokeWidth="1.2"
           filter="url(#glow)"
           opacity="0.8"
         />
-
         {/* Inner border */}
         <path
-          d={`
-            M 90 30
-            L 1830 30
-            L 1890 90
-            L 1890 990
-            L 1830 1050
-            L 90 1050
-            L 30 990
-            L 30 90
-            Z
-          `}
+          d="M 34 10 L 966 10 L 990 34 L 990 966 L 966 990 L 34 990 L 10 966 L 10 34 Z"
           stroke="var(--cyber-glow)"
-          strokeWidth="0.5"
-          opacity="0.3"
+          strokeWidth="0.3"
+          opacity="0.25"
         />
-
         {/* Corner accents */}
-        <path d="M 20 130 L 20 80 L 80 20" stroke="var(--cyber-glow)" strokeWidth="3" filter="url(#glow-strong)" strokeLinecap="square" />
-        <path d="M 1840 20 L 1900 80 L 1900 130" stroke="var(--cyber-glow)" strokeWidth="3" filter="url(#glow-strong)" strokeLinecap="square" />
-        <path d="M 1900 950 L 1900 1000 L 1840 1060" stroke="var(--cyber-glow)" strokeWidth="3" filter="url(#glow-strong)" strokeLinecap="square" />
-        <path d="M 80 1060 L 20 1000 L 20 950" stroke="var(--cyber-glow)" strokeWidth="3" filter="url(#glow-strong)" strokeLinecap="square" />
-
-        {/* Top tick marks */}
-        {[200, 400, 600, 1320, 1520, 1720].map((x) => (
-          <line key={x} x1={x} y1={20} x2={x} y2={30} stroke="var(--cyber-glow)" strokeWidth="1" opacity="0.4" />
+        <path d="M 6 55 L 6 30 L 30 6" stroke="var(--cyber-glow)" strokeWidth="2" filter="url(#glow-strong)" strokeLinecap="square" />
+        <path d="M 970 6 L 994 30 L 994 55" stroke="var(--cyber-glow)" strokeWidth="2" filter="url(#glow-strong)" strokeLinecap="square" />
+        <path d="M 994 945 L 994 970 L 970 994" stroke="var(--cyber-glow)" strokeWidth="2" filter="url(#glow-strong)" strokeLinecap="square" />
+        <path d="M 30 994 L 6 970 L 6 945" stroke="var(--cyber-glow)" strokeWidth="2" filter="url(#glow-strong)" strokeLinecap="square" />
+        {/* Tick marks */}
+        {[150, 300, 500, 700, 850].map((x) => (
+          <line key={x} x1={x} y1={6} x2={x} y2={12} stroke="var(--cyber-glow)" strokeWidth="0.5" opacity="0.35" />
         ))}
       </svg>
 
+      {/* Mobile border */}
+      <div
+        className="pointer-events-none absolute inset-[2px] z-40 md:hidden"
+        style={{
+          border: "1px solid var(--cyber-glow)",
+          boxShadow: "0 0 6px var(--cyber-glow-dim), inset 0 0 6px var(--cyber-glow-dim)",
+          opacity: 0.5,
+        }}
+      />
+
       {/* Side indicators */}
-      <div className="absolute left-2.5 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1.5">
+      <div className="absolute left-[0.35%] top-1/2 z-40 -translate-y-1/2 flex-col gap-1 hidden lg:flex">
         {[0.9, 0.7, 0.5, 0.3].map((opacity, i) => (
           <div
             key={i}
-            className="h-5 w-1.5 rounded-sm"
+            className="rounded-sm"
             style={{
+              width: "3px",
+              height: "14px",
               backgroundColor: "var(--cyber-glow)",
               opacity,
               boxShadow: "0 0 4px var(--cyber-glow-dim)",
@@ -155,12 +160,14 @@ export function CyberFrame({
           />
         ))}
       </div>
-      <div className="absolute right-2.5 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1.5">
+      <div className="absolute right-[0.35%] top-1/2 z-40 -translate-y-1/2 flex-col gap-1 hidden lg:flex">
         {[0.3, 0.5, 0.7, 0.9].map((opacity, i) => (
           <div
             key={i}
-            className="h-5 w-1.5 rounded-sm"
+            className="rounded-sm"
             style={{
+              width: "3px",
+              height: "14px",
               backgroundColor: "var(--cyber-glow)",
               opacity,
               boxShadow: "0 0 4px var(--cyber-glow-dim)",
@@ -170,41 +177,47 @@ export function CyberFrame({
       </div>
 
       {/* ============================================= */}
-      {/* MAIN CONTENT ZONE                             */}
+      {/* MAIN CONTENT -- percentage-based spacing      */}
       {/* ============================================= */}
-      <div className="relative z-10 flex flex-col h-full px-12 pt-8 pb-6">
-        {/* HEADER */}
-        <header className="flex items-center justify-between pb-3 shrink-0">
-          {/* Left: title + clock */}
-          <div className="flex items-center gap-4">
-            <h1
-              className="font-mono text-lg tracking-[0.2em] uppercase"
-              style={{ color: "var(--cyber-glow)" }}
-            >
-              LONG LIVE MODELS
-            </h1>
-            <span
-              className="font-mono text-xs tabular-nums"
-              style={{ color: "var(--cyber-glow)", opacity: 0.5 }}
-            >
-              {time}
-            </span>
+      <div className="relative z-10 flex flex-col h-full" style={framePad}>
+
+        {/* -------- HEADER -------- */}
+        <header className="shrink-0 flex flex-col gap-2 pb-[0.6%]">
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1
+                className="font-mono text-base md:text-lg lg:text-xl tracking-[0.2em] uppercase whitespace-nowrap"
+                style={{ color: "var(--cyber-glow)" }}
+              >
+                LONG LIVE MODELS
+              </h1>
+              <span
+                className="font-mono text-xs md:text-sm tabular-nums whitespace-nowrap"
+                style={{ color: "var(--cyber-glow)", opacity: 0.5 }}
+              >
+                {date}
+                <span className="mx-1.5" style={{ opacity: 0.4 }}>{"/"}</span>
+                {time}
+              </span>
+            </div>
           </div>
 
-          {/* Right: nav tabs + speed control */}
-          <div className="flex items-center gap-5">
-            <nav className="flex items-center gap-0.5">
+          {/* Nav row */}
+          <div className="flex items-center justify-between">
+            <nav className="flex items-center">
               {TABS.map((tab) => {
                 const isActive = activeTab === tab.id
                 return (
                   <button
                     key={tab.id}
                     onClick={() => onTabChange?.(tab.id)}
-                    className="cyber-tab-btn group relative px-3.5 py-2 font-mono text-xs tracking-widest uppercase cursor-pointer"
+                    className="font-mono text-sm md:text-base tracking-wider uppercase cursor-pointer whitespace-nowrap"
                     style={{
+                      padding: "6px 14px",
                       color: isActive ? "var(--cyber-glow)" : "var(--muted-foreground)",
                       backgroundColor: isActive ? "rgba(229,195,75,0.1)" : "transparent",
-                      borderBottom: isActive ? "1px solid var(--cyber-glow)" : "1px solid transparent",
+                      borderBottom: isActive ? "2px solid var(--cyber-glow)" : "2px solid transparent",
                       textShadow: isActive ? "0 0 10px rgba(229,195,75,0.4)" : "none",
                       transition: "all 0.2s ease",
                     }}
@@ -213,7 +226,7 @@ export function CyberFrame({
                         e.currentTarget.style.color = "var(--cyber-glow)"
                         e.currentTarget.style.backgroundColor = "rgba(229,195,75,0.06)"
                         e.currentTarget.style.textShadow = "0 0 10px rgba(229,195,75,0.3)"
-                        e.currentTarget.style.borderBottom = "1px solid rgba(229,195,75,0.4)"
+                        e.currentTarget.style.borderBottom = "2px solid rgba(229,195,75,0.4)"
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -221,7 +234,7 @@ export function CyberFrame({
                         e.currentTarget.style.color = "var(--muted-foreground)"
                         e.currentTarget.style.backgroundColor = "transparent"
                         e.currentTarget.style.textShadow = "none"
-                        e.currentTarget.style.borderBottom = "1px solid transparent"
+                        e.currentTarget.style.borderBottom = "2px solid transparent"
                       }
                     }}
                   >
@@ -233,8 +246,9 @@ export function CyberFrame({
 
             {/* Speed control */}
             <div
-              className="relative flex items-center gap-3 px-3.5 py-1.5"
+              className="relative flex items-center gap-3 shrink-0"
               style={{
+                padding: "5px 14px",
                 backgroundColor: "rgba(229,195,75,0.04)",
                 border: "1px solid rgba(229,195,75,0.1)",
                 clipPath: "polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px)",
@@ -243,7 +257,7 @@ export function CyberFrame({
               onMouseLeave={() => setSpeedHover(false)}
             >
               <span
-                className="font-mono text-[10px] tracking-widest uppercase select-none"
+                className="font-mono text-xs tracking-widest uppercase select-none"
                 style={{ color: "var(--muted-foreground)" }}
               >
                 {"СКОРОСТЬ"}
@@ -256,15 +270,16 @@ export function CyberFrame({
                 step={0.1}
                 value={timeSpeed}
                 onChange={(e) => onTimeSpeedChange?.(Math.round(parseFloat(e.target.value) * 10) / 10)}
-                className="cyber-slider w-32 h-1"
+                className="cyber-slider h-1"
                 style={{
+                  width: "clamp(80px, 8vw, 160px)",
                   background: `linear-gradient(to right, var(--cyber-glow) ${(timeSpeed / 5) * 100}%, var(--border) ${(timeSpeed / 5) * 100}%)`,
                 }}
               />
 
               <button
                 onClick={() => onTimeSpeedChange?.(DEFAULT_SPEED)}
-                className="font-mono text-sm tabular-nums text-right cursor-pointer"
+                className="font-mono text-sm tabular-nums cursor-pointer"
                 title={"Клик = сброс на " + DEFAULT_SPEED + "x"}
                 style={{
                   color: "var(--cyber-glow)",
@@ -272,7 +287,8 @@ export function CyberFrame({
                   background: "none",
                   border: "none",
                   padding: 0,
-                  width: "3.2em",
+                  width: "3.5em",
+                  textAlign: "right",
                   transition: "opacity 0.2s ease, text-shadow 0.2s ease",
                   opacity: timeSpeed === DEFAULT_SPEED ? 0.7 : 1,
                 }}
@@ -286,10 +302,9 @@ export function CyberFrame({
                 {timeSpeed.toFixed(1)}x
               </button>
 
-              {/* Tooltip */}
               {speedHover && (
                 <div
-                  className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 font-mono text-[10px] tracking-wide whitespace-nowrap pointer-events-none z-50"
+                  className="absolute top-full right-0 mt-2 px-3 py-1.5 font-mono text-[10px] tracking-wide whitespace-nowrap pointer-events-none z-50 hidden lg:block"
                   style={{
                     backgroundColor: "rgba(17,17,24,0.95)",
                     border: "1px solid rgba(229,195,75,0.25)",
@@ -304,7 +319,7 @@ export function CyberFrame({
           </div>
         </header>
 
-        {/* CONTENT AREA */}
+        {/* -------- CONTENT -------- */}
         <div
           className="relative flex-1 min-h-0 overflow-hidden rounded-sm border"
           style={{ borderColor: "rgba(229,195,75,0.2)" }}
@@ -312,25 +327,26 @@ export function CyberFrame({
           {children}
         </div>
 
-        {/* BOTTOM PANEL: add event */}
-        <div className="shrink-0 pt-3">
+        {/* -------- BOTTOM PANEL -------- */}
+        <div className="shrink-0" style={{ paddingTop: "0.6%" }}>
           <div
             className="relative overflow-hidden"
             style={{
-              clipPath: "polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px)",
+              clipPath: "polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px)",
             }}
           >
             <div
-              className="flex items-center gap-3 p-1.5"
+              className="flex items-center gap-3"
               style={{
+                padding: "4px 6px",
                 border: "1px solid rgba(229,195,75,0.2)",
                 backgroundColor: "rgba(17,17,24,0.9)",
                 animation: "cyber-shimmer 4s ease-in-out infinite",
-                clipPath: "polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px)",
+                clipPath: "polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px)",
               }}
             >
-              {/* Pulsing indicator dot */}
-              <div className="shrink-0 pl-2.5">
+              {/* Pulsing dot */}
+              <div className="shrink-0 pl-2">
                 <div
                   className="h-2 w-2 rounded-full"
                   style={{
@@ -352,17 +368,21 @@ export function CyberFrame({
                   }
                 }}
                 placeholder="Введите событие для мира агентов..."
-                className="flex-1 bg-transparent font-mono text-sm px-2 py-2.5 placeholder:opacity-30 focus:outline-none"
+                className="flex-1 bg-transparent font-mono text-sm md:text-base py-2.5 placeholder:opacity-30 focus:outline-none"
                 style={{
                   color: "var(--foreground)",
                   caretColor: "var(--cyber-glow)",
+                  paddingLeft: "8px",
+                  paddingRight: "8px",
                 }}
               />
 
               <button
                 onClick={handleSubmitEvent}
-                className="shrink-0 px-5 py-2.5 mr-1.5 font-mono text-[11px] tracking-widest uppercase cursor-pointer"
+                className="shrink-0 font-mono text-xs md:text-sm tracking-widest uppercase cursor-pointer"
                 style={{
+                  padding: "10px 20px",
+                  marginRight: "4px",
                   backgroundColor: "rgba(229,195,75,0.08)",
                   color: "var(--cyber-glow)",
                   border: "1px solid rgba(229,195,75,0.25)",
@@ -395,26 +415,6 @@ export function CyberFrame({
                 {"ДОБАВИТЬ СОБЫТИЕ"}
               </button>
             </div>
-
-            {/* Corner accent lines on event panel */}
-            <div
-              className="absolute top-0 left-0 w-4 h-4 pointer-events-none"
-              style={{
-                borderTop: "1px solid var(--cyber-glow)",
-                borderLeft: "1px solid var(--cyber-glow)",
-                opacity: 0.5,
-                clipPath: "polygon(0 0, 100% 0, 0 100%)",
-              }}
-            />
-            <div
-              className="absolute top-0 right-0 w-4 h-4 pointer-events-none"
-              style={{
-                borderTop: "1px solid var(--cyber-glow)",
-                borderRight: "1px solid var(--cyber-glow)",
-                opacity: 0.5,
-                clipPath: "polygon(0 0, 100% 0, 100% 100%)",
-              }}
-            />
           </div>
         </div>
       </div>
