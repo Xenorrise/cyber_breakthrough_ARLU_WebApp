@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import {
   MOOD_CONFIG,
+  generateAgentWithAi,
   getAgents,
   getEvents,
   getRelationships,
@@ -213,6 +214,9 @@ export function AgentsPanel({
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [loading, setLoading] = useState(true)
+  const [generationPrompt, setGenerationPrompt] = useState("")
+  const [generationError, setGenerationError] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -235,6 +239,37 @@ export function AgentsPanel({
       active = false
     }
   }, [refreshToken])
+
+  const handleGenerate = async () => {
+    const prompt = generationPrompt.trim()
+    if (!prompt || generating) {
+      return
+    }
+
+    setGenerating(true)
+    setGenerationError(null)
+
+    try {
+      const created = await generateAgentWithAi(prompt)
+      if (!created) {
+        setGenerationError("Не удалось сгенерировать агента. Проверь backend и OPENAI_API_KEY.")
+        return
+      }
+
+      const [loadedAgents, loadedEvents, loadedRelationships] = await Promise.all([
+        getAgents(),
+        getEvents(),
+        getRelationships(),
+      ])
+      setAgents(loadedAgents)
+      setEvents(loadedEvents)
+      setRelationships(loadedRelationships)
+      setGenerationPrompt("")
+      setSelectedId(created.id)
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   // Синхро с внешним выбором (из клика на ноду)
   const prevPreSelected = useRef(preSelectedAgentId)
@@ -271,14 +306,6 @@ export function AgentsPanel({
     )
   }
 
-  if (agents.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center font-mono text-xs" style={{ backgroundColor: "var(--cyber-surface)", color: "var(--muted-foreground)" }}>
-        Агентов пока нет
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--cyber-surface)" }}>
       <div
@@ -293,7 +320,50 @@ export function AgentsPanel({
         </span>
       </div>
 
+      <div className="px-5 py-3 border-b" style={{ borderColor: "rgba(229,195,75,0.12)" }}>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={generationPrompt}
+            onChange={(e) => setGenerationPrompt(e.target.value)}
+            placeholder="Опиши агента для ИИ..."
+            className="flex-1 font-mono text-xs px-3 py-2 rounded-sm outline-none"
+            style={{
+              backgroundColor: "rgba(229,195,75,0.04)",
+              border: "1px solid rgba(229,195,75,0.2)",
+              color: "var(--foreground)",
+            }}
+            disabled={generating}
+          />
+          <button
+            onClick={handleGenerate}
+            disabled={generating || generationPrompt.trim().length === 0}
+            className="font-mono text-xs tracking-wider uppercase px-3 py-2 rounded-sm cursor-pointer disabled:cursor-not-allowed"
+            style={{
+              color: generating ? "var(--muted-foreground)" : "var(--cyber-glow)",
+              backgroundColor: generating ? "rgba(229,195,75,0.02)" : "rgba(229,195,75,0.08)",
+              border: "1px solid rgba(229,195,75,0.25)",
+            }}
+          >
+            {generating ? "ГЕНЕРАЦИЯ..." : "СОЗДАТЬ ИИ"}
+          </button>
+        </div>
+        {generationError ? (
+          <p className="mt-2 font-mono text-[10px]" style={{ color: "#f87171" }}>
+            {generationError}
+          </p>
+        ) : null}
+      </div>
+
       <div className="flex-1 overflow-y-auto px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-3 auto-rows-min">
+        {agents.length === 0 ? (
+          <div
+            className="col-span-full flex items-center justify-center font-mono text-xs py-8"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            Агентов пока нет. Опиши первого и нажми "СОЗДАТЬ ИИ".
+          </div>
+        ) : null}
         {agents.map((agent) => {
           const mc = MOOD_CONFIG[agent.mood]
           return (

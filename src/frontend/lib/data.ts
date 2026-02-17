@@ -605,6 +605,30 @@ export async function addEvent(text: string): Promise<boolean> {
   }
 }
 
+export async function generateAgentWithAi(prompt: string, model?: string): Promise<Agent | null> {
+  const trimmedPrompt = prompt.trim()
+  if (!trimmedPrompt) {
+    return null
+  }
+
+  const payload = {
+    prompt: trimmedPrompt,
+    model: model?.trim() || undefined,
+  }
+
+  try {
+    const created = await backendRequest<BackendAgentDto>("/api/user-agents/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+
+    return mapBackendAgent(created)
+  } catch (error) {
+    console.warn("[data] generateAgentWithAi failed", error)
+    return null
+  }
+}
+
 export async function getAgents(): Promise<Agent[]> {
   try {
     const agents = await backendRequest<BackendAgentDto[]>("/api/user-agents")
