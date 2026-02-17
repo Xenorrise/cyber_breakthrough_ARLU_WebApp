@@ -13,6 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<OpenAIOptions>(builder.Configuration.GetSection(OpenAIOptions.SectionName));
 builder.Services.Configure<QdrantOptions>(builder.Configuration.GetSection(QdrantOptions.SectionName));
 builder.Services.Configure<MemoryCompressionOptions>(builder.Configuration.GetSection(MemoryCompressionOptions.SectionName));
+builder.Services.Configure<TickProcessorOptions>(builder.Configuration.GetSection(TickProcessorOptions.SectionName));
 
 builder.Services.AddDbContext<AgentDbContext>(options => options.UseInMemoryDatabase("agent-memory-db"));
 
@@ -55,6 +56,7 @@ builder.Services.AddScoped<MemoryService>();
 builder.Services.AddScoped<MemoryCompressor>();
 builder.Services.AddScoped<AgentBrain>();
 builder.Services.AddScoped<IUserAgentsService, UserAgentsService>();
+builder.Services.AddScoped<ITickProcessor, TickProcessor>();
 builder.Services.AddSingleton<IEventService, InMemoryEventService>();
 builder.Services.AddSingleton<IAgentCommandQueue, InMemoryAgentCommandQueue>();
 builder.Services.AddSingleton<IUserContextService, UserContextService>();

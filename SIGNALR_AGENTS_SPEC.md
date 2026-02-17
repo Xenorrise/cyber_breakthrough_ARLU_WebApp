@@ -1,16 +1,16 @@
-# User Agents + SignalR Spec
+# Спецификация User Agents + SignalR
 
-## 1. SignalR connection
+## 1. Подключение к SignalR
 
-- Hub URL: `/hubs/agents`
-- Full local URL examples:
+- URL хаба: `/hubs/agents`
+- Полные локальные URL:
   - `http://localhost:5133/hubs/agents` (`dotnet run`)
-  - `http://localhost:8080/hubs/agents` (docker backend)
-- User identity source:
-  - primary: authenticated claim `nameidentifier` / `sub` / `userId`
-  - fallback (development): header `X-User-Id`
+  - `http://localhost:8080/hubs/agents` (backend в docker)
+- Источник идентификатора пользователя:
+  - основной: claim `nameidentifier` / `sub` / `userId`
+  - fallback для dev: заголовок `X-User-Id`
 
-### Frontend connection example
+### Пример подключения на фронте
 
 ```ts
 import * as signalR from "@microsoft/signalr";
@@ -30,9 +30,9 @@ await connection.start();
 await connection.invoke("SubscribeUser");
 ```
 
-## 2. Realtime events
+## 2. Realtime-события
 
-All events are sent as envelope:
+Все события отправляются в envelope-формате:
 
 ```json
 {
@@ -45,7 +45,7 @@ All events are sent as envelope:
 
 ### `agents.list.updated`
 
-Payload type: `AgentsListUpdatedDto`
+Тип payload: `AgentsListUpdatedDto`
 
 ```json
 {
@@ -76,7 +76,7 @@ Payload type: `AgentsListUpdatedDto`
 
 ### `agent.status.changed`
 
-Payload type: `AgentStatusDto`
+Тип payload: `AgentStatusDto`
 
 ```json
 {
@@ -89,7 +89,7 @@ Payload type: `AgentStatusDto`
 
 ### `agent.message`
 
-Payload type: `AgentMessageDto`
+Тип payload: `AgentMessageDto`
 
 ```json
 {
@@ -104,9 +104,9 @@ Payload type: `AgentMessageDto`
 }
 ```
 
-### `agent.thought` (optional internal trace)
+### `agent.thought` (опциональный внутренний trace)
 
-Payload type: `AgentThoughtDto`
+Тип payload: `AgentThoughtDto`
 
 ```json
 {
@@ -117,9 +117,9 @@ Payload type: `AgentThoughtDto`
 }
 ```
 
-### `agent.progress` (optional progress)
+### `agent.progress` (опциональный прогресс)
 
-Payload type: `AgentProgressDto`
+Тип payload: `AgentProgressDto`
 
 ```json
 {
@@ -133,7 +133,7 @@ Payload type: `AgentProgressDto`
 
 ### `agent.error`
 
-Payload type: `ErrorDto`
+Тип payload: `ErrorDto`
 
 ```json
 {
@@ -145,30 +145,30 @@ Payload type: `ErrorDto`
 }
 ```
 
-## 3. Hub methods
+## 3. Методы Hub
 
 ### `SubscribeUser()`
-- Request: no args
-- Response: `HubAckDto`
-- Effect: joins `user:{userId}`
+- Запрос: без аргументов
+- Ответ: `HubAckDto`
+- Эффект: подключение в группу `user:{userId}`
 
 ### `SubscribeAgents()`
-- Alias of `SubscribeUser()`
+- Алиас для `SubscribeUser()`
 
 ### `SubscribeAgent(agentId: Guid)`
-- Request:
+- Запрос:
 ```json
 { "agentId": "af2b0f86-2f0a-4f0a-9df8-5134a5005d7e" }
 ```
-- Response: `HubAckDto`
-- Effect: joins `agent:{agentId}`
-- Error: `HubException("Agent '...' not found.")`
+- Ответ: `HubAckDto`
+- Эффект: подключение в группу `agent:{agentId}`
+- Ошибка: `HubException("Agent '...' not found.")`
 
 ### `UnsubscribeAgent(agentId: Guid)`
-- Response: `HubAckDto`
+- Ответ: `HubAckDto`
 
 ### `CreateAgent(dto: CreateAgentRequestDto)`
-- Input JSON:
+- Входной JSON:
 ```json
 {
   "name": "Researcher",
@@ -184,10 +184,10 @@ Payload type: `ErrorDto`
   }
 }
 ```
-- Response: `AgentDto`
+- Ответ: `AgentDto`
 
 ### `CommandAgent(agentId: Guid, commandDto: CommandAgentRequestDto)`
-- Input JSON:
+- Входной JSON:
 ```json
 {
   "command": "analyze",
@@ -195,45 +195,46 @@ Payload type: `ErrorDto`
   "correlationId": "a58e2f376fcd45f8b8b6e7f0f2f0f0b6"
 }
 ```
-- Response: `CommandAckDto`
-- Work model: async queue; actual result delivered by realtime events
+- Ответ: `CommandAckDto`
+- Модель выполнения: асинхронно через очередь; итоговые результаты приходят через realtime-события
 
 ### `SendMessage(agentId: Guid, messageDto: CommandAgentRequestDto)`
-- Alias of `CommandAgent`
+- Алиас для `CommandAgent`
 
 ### `StopAgent(agentId: Guid)`, `PauseAgent(agentId: Guid)`, `ResumeAgent(agentId: Guid)`
-- Response: `AgentStatusDto`
+- Ответ: `AgentStatusDto`
 
-## 4. REST initial load endpoints
+## 4. REST-эндпоинты для initial load
 
-All endpoints use user identity from auth claims or `X-User-Id`.
+Все эндпоинты берут пользователя из auth claims или `X-User-Id`.
 
 - `GET /api/user-agents`
-  - Response: `AgentDto[]`
+  - Ответ: `AgentDto[]`
 - `GET /api/user-agents/{agentId}`
-  - Response: `AgentDto`
+  - Ответ: `AgentDto`
 - `GET /api/user-agents/{agentId}/messages?limit=50`
-  - Response: `PagedResultDto<AgentMessageDto>`
+  - Ответ: `PagedResultDto<AgentMessageDto>`
 - `POST /api/user-agents`
   - Body: `CreateAgentRequestDto`
-  - Response: `201 Created` + `AgentDto`
+  - Ответ: `201 Created` + `AgentDto`
 - `POST /api/user-agents/{agentId}/commands`
   - Body: `CommandAgentRequestDto`
-  - Response: `202 Accepted` + `CommandAckDto`
+  - Ответ: `202 Accepted` + `CommandAckDto`
 - `POST /api/user-agents/{agentId}/pause`
-  - Response: `AgentStatusDto`
+  - Ответ: `AgentStatusDto`
 - `POST /api/user-agents/{agentId}/resume`
-  - Response: `AgentStatusDto`
+  - Ответ: `AgentStatusDto`
 - `POST /api/user-agents/{agentId}/stop`
-  - Response: `AgentStatusDto`
+  - Ответ: `AgentStatusDto`
 - `DELETE /api/user-agents/{agentId}`
-  - Response: `204 No Content` (archive)
+  - Ответ: `204 No Content` (архивация)
 
-## 5. Data flow
+## 5. Поток данных
 
-1. Front connects to `AgentsHub` and auto-joins `user:{userId}` on connect.
-2. Front calls REST initial load (`GET /api/user-agents`, details/messages for selected agent).
-3. Front creates/commands agent via REST or Hub method.
-4. Command is accepted immediately, pushed to in-memory queue.
-5. Background worker runs existing `AgentBrain` logic, stores assistant output, updates agent status.
-6. Hub notifier emits updates to `user:{userId}` and `agent:{agentId}` groups.
+1. Фронт подключается к `AgentsHub` и автоматически попадает в `user:{userId}`.
+2. Фронт делает initial load через REST (`GET /api/user-agents`, детали и сообщения выбранного агента).
+3. Фронт создаёт агента/отправляет команду через REST или Hub method.
+4. Команда подтверждается сразу и кладётся в in-memory очередь.
+5. Background worker вызывает `ITickProcessor.ProcessTickAsync(...)`.
+6. `TickProcessor` выбирает `Working`-агентов (с ограничениями из конфига), выполняет существующую логику `AgentBrain`, сохраняет ответ и обновляет статус.
+7. Hub notifier рассылает изменения в группы `user:{userId}` и `agent:{agentId}`.
