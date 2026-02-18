@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'LONG LIVE MODELS // God Panel',
+  title: 'LONG LIFE MODELS // God Panel',
   description: 'Наблюдайте и управляйте автономными AI-агентами в реальном времени',
 }
 

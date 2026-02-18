@@ -64,7 +64,10 @@ export function EventsPanel({ refreshToken }: { refreshToken?: number }) {
       }
 
       try {
-        const [loadedEvents, loadedAgents] = await Promise.all([getEvents(), getAgents()])
+        const [loadedEvents, loadedAgents] = await Promise.all([
+          getEvents({ forceRefresh: true }),
+          getAgents({ forceRefresh: true }),
+        ])
         if (!active) {
           return
         }

@@ -20,7 +20,7 @@ export default function Home() {
     let active = true
 
     const syncWorldTime = async () => {
-      const current = await getWorldTime()
+      const current = await getWorldTime({ forceRefresh: true })
       if (!current || !active) {
         return
       }

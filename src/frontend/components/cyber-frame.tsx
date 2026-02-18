@@ -241,7 +241,7 @@ export function CyberFrame({
                 className="font-mono text-base md:text-lg lg:text-xl tracking-[0.2em] uppercase whitespace-nowrap"
                 style={{ color: "var(--cyber-glow)" }}
               >
-                LONG LIVE MODELS
+                LONG LIFE MODELS
               </h1>
               <div className="flex flex-col items-start gap-1">
                 <div className="flex items-center gap-2">

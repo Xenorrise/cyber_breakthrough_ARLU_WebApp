@@ -249,9 +249,9 @@ export function AgentsPanel({
 
   const reloadAll = async () => {
     const [loadedAgents, loadedEvents, loadedRelationships] = await Promise.all([
-      getAgents(),
-      getEvents(),
-      getRelationships(),
+      getAgents({ forceRefresh: true }),
+      getEvents({ forceRefresh: true }),
+      getRelationships({ forceRefresh: true }),
     ])
     setAgents(loadedAgents)
     setEvents(loadedEvents)
@@ -262,7 +262,11 @@ export function AgentsPanel({
     let active = true
     setLoading(true)
 
-    Promise.all([getAgents(), getEvents(), getRelationships()])
+    Promise.all([
+      getAgents({ forceRefresh: true }),
+      getEvents({ forceRefresh: true }),
+      getRelationships({ forceRefresh: true }),
+    ])
       .then(([loadedAgents, loadedEvents, loadedRelationships]) => {
         if (!active) return
         setAgents(loadedAgents)

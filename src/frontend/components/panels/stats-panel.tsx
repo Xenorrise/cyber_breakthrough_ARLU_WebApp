@@ -60,7 +60,7 @@ export function StatsPanel({ refreshToken }: { refreshToken?: number }) {
   useEffect(() => {
     let active = true
     setStats(null)
-    getStats().then((loadedStats) => {
+    getStats({ forceRefresh: true }).then((loadedStats) => {
       if (active) {
         setStats(loadedStats)
       }

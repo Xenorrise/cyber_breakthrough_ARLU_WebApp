@@ -203,7 +203,10 @@ export function GraphPanel({
     }
 
     const loadData = async () => {
-      const [loadedAgents, loadedRelationships] = await Promise.all([getAgents(), getRelationships()])
+      const [loadedAgents, loadedRelationships] = await Promise.all([
+        getAgents({ forceRefresh: true }),
+        getRelationships({ forceRefresh: true }),
+      ])
       if (!active) return
 
       const agentsSignature = JSON.stringify(loadedAgents.map((agent) => [agent.id, agent.name, agent.avatar, agent.mood]))

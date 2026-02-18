@@ -905,8 +905,8 @@ class SimpleCache {
   }
 }
 
-// Создаём экземпляры кэша для разных типов данных 
-const agentsCache = new SimpleCache(15 * 1000);        // 1 минута
+// Создаём экземпляры кэша для разных типов данных
+const agentsCache = new SimpleCache(15 * 1000);        // 15 секунд
 const eventsCache = new SimpleCache(15 * 1000);
 const relationshipsCache = new SimpleCache(15 * 1000);
 const statsCache = new SimpleCache(15 * 1000);
@@ -959,8 +959,9 @@ export async function addEvent(text: string): Promise<boolean> {
       method: "POST",
       body: JSON.stringify(payload),
     })
-    // После успешного добавления события инвалидируем кэш событий
+    // После успешного добавления события инвалидируем связанные с ним кэши
     invalidateEventsCache()
+    invalidateStatsCache()
     return true
   } catch (error) {
     console.warn("[data] addEvent fallback, backend unavailable", error)
@@ -1067,9 +1068,10 @@ export async function commandAgent(
       }
     )
 
-    // После отправки команды инвалидируем кэш агентов и событий (состояние могло измениться)
+    // После отправки команды инвалидируем кэши, которые могли измениться
     invalidateAgentsCache()
     invalidateEventsCache()
+    invalidateStatsCache()
 
     return {
       agentId: accepted.agentId,
@@ -1124,9 +1126,10 @@ export async function broadcastAgentCommand(
       }
     )
 
-    // Инвалидируем агентов и события
+    // Инвалидируем кэши, которые могли измениться
     invalidateAgentsCache()
     invalidateEventsCache()
+    invalidateStatsCache()
 
     return {
       userId: accepted.userId,
@@ -1188,8 +1191,11 @@ export async function generateAgentWithAi(prompt: string, model?: string): Promi
       body: JSON.stringify(payload),
     }, 90000)
 
-    // Инвалидируем кэш агентов, так как появился новый агент
+    // Новый агент влияет на список, связи, события и агрегаты
     invalidateAgentsCache()
+    invalidateEventsCache()
+    invalidateRelationshipsCache()
+    invalidateStatsCache()
 
     return mapBackendAgent(created)
   } catch (error) {
@@ -1209,8 +1215,11 @@ export async function deleteAgent(id: string): Promise<boolean> {
       method: "DELETE",
     })
 
-    // Инвалидируем кэш агентов (список изменился)
+    // Удаление агента влияет на несколько наборов данных
     invalidateAgentsCache()
+    invalidateEventsCache()
+    invalidateRelationshipsCache()
+    invalidateStatsCache()
 
     return true
   } catch (error) {
@@ -1219,10 +1228,17 @@ export async function deleteAgent(id: string): Promise<boolean> {
   }
 }
 
-export async function getAgents(): Promise<Agent[]> {
+interface LoadOptions {
+  forceRefresh?: boolean
+}
+
+export async function getAgents(options: LoadOptions = {}): Promise<Agent[]> {
+  const forceRefresh = options.forceRefresh === true
   const cacheKey = 'agents'
-  const cached = agentsCache.get<Agent[]>(cacheKey)
-  if (cached) return cached
+  if (!forceRefresh) {
+    const cached = agentsCache.get<Agent[]>(cacheKey)
+    if (cached) return cached
+  }
 
   try {
     const agents = await backendRequest<BackendAgentDto[]>("/api/user-agents")
@@ -1235,10 +1251,13 @@ export async function getAgents(): Promise<Agent[]> {
   }
 }
 
-export async function getAgent(id: string): Promise<Agent | undefined> {
+export async function getAgent(id: string, options: LoadOptions = {}): Promise<Agent | undefined> {
+  const forceRefresh = options.forceRefresh === true
   const cacheKey = `agent:${id}`
-  const cached = agentsCache.get<Agent>(cacheKey)
-  if (cached) return cached
+  if (!forceRefresh) {
+    const cached = agentsCache.get<Agent>(cacheKey)
+    if (cached) return cached
+  }
 
   try {
     const agent = await backendRequest<BackendAgentDto>(`/api/user-agents/${encodeURIComponent(id)}`)
@@ -1250,14 +1269,17 @@ export async function getAgent(id: string): Promise<Agent | undefined> {
   }
 }
 
-export async function getEvents(): Promise<AgentEvent[]> {
+export async function getEvents(options: LoadOptions = {}): Promise<AgentEvent[]> {
+  const forceRefresh = options.forceRefresh === true
   const cacheKey = 'events'
-  const cached = eventsCache.get<AgentEvent[]>(cacheKey)
-  if (cached) return cached
+  if (!forceRefresh) {
+    const cached = eventsCache.get<AgentEvent[]>(cacheKey)
+    if (cached) return cached
+  }
 
   try {
     const [agents, events] = await Promise.all([
-      getAgents(),
+      getAgents({ forceRefresh }),
       backendRequest<BackendEventDto[]>("/api/events"),
     ])
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
@@ -1270,10 +1292,13 @@ export async function getEvents(): Promise<AgentEvent[]> {
   }
 }
 
-export async function getRelationships(): Promise<Relationship[]> {
+export async function getRelationships(options: LoadOptions = {}): Promise<Relationship[]> {
+  const forceRefresh = options.forceRefresh === true
   const cacheKey = 'relationships'
-  const cached = relationshipsCache.get<Relationship[]>(cacheKey)
-  if (cached) return cached
+  if (!forceRefresh) {
+    const cached = relationshipsCache.get<Relationship[]>(cacheKey)
+    if (cached) return cached
+  }
 
   try {
     const relationships = await backendRequest<BackendRelationshipDto[]>("/api/relationships")
@@ -1291,10 +1316,13 @@ export async function getRelationships(): Promise<Relationship[]> {
   }
 }
 
-export async function getStats(): Promise<WorldStats> {
+export async function getStats(options: LoadOptions = {}): Promise<WorldStats> {
+  const forceRefresh = options.forceRefresh === true
   const cacheKey = 'stats'
-  const cached = statsCache.get<WorldStats>(cacheKey)
-  if (cached) return cached
+  if (!forceRefresh) {
+    const cached = statsCache.get<WorldStats>(cacheKey)
+    if (cached) return cached
+  }
 
   try {
     const stats = await backendRequest<BackendWorldStatsDto>("/api/stats")
@@ -1307,10 +1335,13 @@ export async function getStats(): Promise<WorldStats> {
   }
 }
 
-export async function getWorldTime(): Promise<WorldTime | null> {
+export async function getWorldTime(options: LoadOptions = {}): Promise<WorldTime | null> {
+  const forceRefresh = options.forceRefresh === true
   const cacheKey = 'worldTime'
-  const cached = worldTimeCache.get<WorldTime>(cacheKey)
-  if (cached) return cached
+  if (!forceRefresh) {
+    const cached = worldTimeCache.get<WorldTime>(cacheKey)
+    if (cached) return cached
+  }
 
   try {
     const worldTime = await backendRequest<BackendWorldTimeDto>("/api/world/time")
@@ -1372,6 +1403,8 @@ export async function resetWorldSimulation(): Promise<WorldTime | null> {
       gameTime: updated.gameTime,
       speed: updated.speed,
     }
+    // После полного сброса симуляции инвалидация должна затронуть весь фронтовый кэш.
+    invalidateAllCaches()
     worldTimeCache.set('worldTime', mapped)
     return mapped
   } catch (error) {

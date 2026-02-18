@@ -95,7 +95,7 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
       }
 
       try {
-        const loadedAgents = await getAgents()
+        const loadedAgents = await getAgents({ forceRefresh: true })
         if (!active || requestId !== loadRequestIdRef.current) {
           return
         }
