@@ -1,7 +1,5 @@
-﻿/**
+﻿/*
  * Слой данных -- типы и моки.
- * Сейчас захардкожено, при подключении БД замени getAgents(), getEvents() и т.д.
- * Компоненты трогать не нужно -- зависят только от типов.
  */
 
 // ===== ТИПЫ =====
@@ -11,7 +9,7 @@ export type Mood = "happy" | "neutral" | "sad" | "angry" | "excited" | "anxious"
 export interface Agent {
   id: string
   name: string
-  avatar: string        // аватар буква/эмо
+  avatar: string        // аватар буква
   mood: Mood
   traits: string[]      // черты
   description: string
@@ -862,6 +860,89 @@ export interface WorldTime {
   speed: number
 }
 
+// ===== ПРОСТОЙ КЭШ С TTL =====
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+class SimpleCache {
+  private cache = new Map<string, CacheEntry<any>>();
+  private ttl: number;
+
+  constructor(ttlMs: number = 60000) { // по умолчанию 1 минута
+    this.ttl = ttlMs;
+  }
+
+  set<T>(key: string, data: T): void {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > this.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  deleteByPrefix(prefix: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+// Создаём экземпляры кэша для разных типов данных
+const agentsCache = new SimpleCache(60 * 1000);        // 1 минута
+const eventsCache = new SimpleCache(60 * 1000);
+const relationshipsCache = new SimpleCache(60 * 1000);
+const statsCache = new SimpleCache(60 * 1000);
+const worldTimeCache = new SimpleCache(60 * 1000);
+
+// Функции инвалидации кэша
+export function invalidateAgentsCache(): void {
+  agentsCache.clear();
+}
+
+export function invalidateEventsCache(): void {
+  eventsCache.clear();
+}
+
+export function invalidateRelationshipsCache(): void {
+  relationshipsCache.clear();
+}
+
+export function invalidateStatsCache(): void {
+  statsCache.clear();
+}
+
+export function invalidateWorldTimeCache(): void {
+  worldTimeCache.clear();
+}
+
+export function invalidateAllCaches(): void {
+  agentsCache.clear();
+  eventsCache.clear();
+  relationshipsCache.clear();
+  statsCache.clear();
+  worldTimeCache.clear();
+}
+
+// ===== ФУНКЦИИ ДОСТУПА К ДАННЫМ =====
+
 export async function addEvent(text: string): Promise<boolean> {
   const payload = {
     type: "ui.note",
@@ -878,6 +959,8 @@ export async function addEvent(text: string): Promise<boolean> {
       method: "POST",
       body: JSON.stringify(payload),
     })
+    // После успешного добавления события инвалидируем кэш событий
+    invalidateEventsCache()
     return true
   } catch (error) {
     console.warn("[data] addEvent fallback, backend unavailable", error)
@@ -984,6 +1067,10 @@ export async function commandAgent(
       }
     )
 
+    // После отправки команды инвалидируем кэш агентов и событий (состояние могло измениться)
+    invalidateAgentsCache()
+    invalidateEventsCache()
+
     return {
       agentId: accepted.agentId,
       userId: accepted.userId,
@@ -1036,6 +1123,10 @@ export async function broadcastAgentCommand(
         body: JSON.stringify(payload),
       }
     )
+
+    // Инвалидируем агентов и события
+    invalidateAgentsCache()
+    invalidateEventsCache()
 
     return {
       userId: accepted.userId,
@@ -1097,6 +1188,9 @@ export async function generateAgentWithAi(prompt: string, model?: string): Promi
       body: JSON.stringify(payload),
     }, 90000)
 
+    // Инвалидируем кэш агентов, так как появился новый агент
+    invalidateAgentsCache()
+
     return mapBackendAgent(created)
   } catch (error) {
     console.warn("[data] generateAgentWithAi failed", error)
@@ -1114,6 +1208,10 @@ export async function deleteAgent(id: string): Promise<boolean> {
     await backendRequest<unknown>(`/api/user-agents/${encodeURIComponent(trimmedId)}`, {
       method: "DELETE",
     })
+
+    // Инвалидируем кэш агентов (список изменился)
+    invalidateAgentsCache()
+
     return true
   } catch (error) {
     console.warn("[data] deleteAgent failed", error)
@@ -1122,9 +1220,15 @@ export async function deleteAgent(id: string): Promise<boolean> {
 }
 
 export async function getAgents(): Promise<Agent[]> {
+  const cacheKey = 'agents'
+  const cached = agentsCache.get<Agent[]>(cacheKey)
+  if (cached) return cached
+
   try {
     const agents = await backendRequest<BackendAgentDto[]>("/api/user-agents")
-    return agents.map(mapBackendAgent)
+    const mapped = agents.map(mapBackendAgent)
+    agentsCache.set(cacheKey, mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] getAgents fallback to mock", error)
     return MOCK_AGENTS
@@ -1132,22 +1236,34 @@ export async function getAgents(): Promise<Agent[]> {
 }
 
 export async function getAgent(id: string): Promise<Agent | undefined> {
+  const cacheKey = `agent:${id}`
+  const cached = agentsCache.get<Agent>(cacheKey)
+  if (cached) return cached
+
   try {
     const agent = await backendRequest<BackendAgentDto>(`/api/user-agents/${encodeURIComponent(id)}`)
-    return mapBackendAgent(agent)
+    const mapped = mapBackendAgent(agent)
+    agentsCache.set(cacheKey, mapped)
+    return mapped
   } catch {
     return MOCK_AGENTS.find((a) => a.id === id)
   }
 }
 
 export async function getEvents(): Promise<AgentEvent[]> {
+  const cacheKey = 'events'
+  const cached = eventsCache.get<AgentEvent[]>(cacheKey)
+  if (cached) return cached
+
   try {
     const [agents, events] = await Promise.all([
       getAgents(),
       backendRequest<BackendEventDto[]>("/api/events"),
     ])
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
-    return events.map((event) => mapBackendEvent(event, agentsById))
+    const mapped = events.map((event) => mapBackendEvent(event, agentsById))
+    eventsCache.set(cacheKey, mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] getEvents fallback to mock", error)
     return MOCK_EVENTS
@@ -1155,14 +1271,20 @@ export async function getEvents(): Promise<AgentEvent[]> {
 }
 
 export async function getRelationships(): Promise<Relationship[]> {
+  const cacheKey = 'relationships'
+  const cached = relationshipsCache.get<Relationship[]>(cacheKey)
+  if (cached) return cached
+
   try {
     const relationships = await backendRequest<BackendRelationshipDto[]>("/api/relationships")
-    return relationships.map((relationship) => ({
+    const mapped = relationships.map((relationship) => ({
       from: relationship.from,
       to: relationship.to,
       sentiment: relationship.sentiment,
       label: relationship.label ?? "interaction",
     }))
+    relationshipsCache.set(cacheKey, mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] getRelationships fallback to mock", error)
     return MOCK_RELATIONSHIPS
@@ -1170,9 +1292,15 @@ export async function getRelationships(): Promise<Relationship[]> {
 }
 
 export async function getStats(): Promise<WorldStats> {
+  const cacheKey = 'stats'
+  const cached = statsCache.get<WorldStats>(cacheKey)
+  if (cached) return cached
+
   try {
     const stats = await backendRequest<BackendWorldStatsDto>("/api/stats")
-    return mapBackendStats(stats)
+    const mapped = mapBackendStats(stats)
+    statsCache.set(cacheKey, mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] getStats fallback to mock", error)
     return MOCK_STATS
@@ -1180,12 +1308,18 @@ export async function getStats(): Promise<WorldStats> {
 }
 
 export async function getWorldTime(): Promise<WorldTime | null> {
+  const cacheKey = 'worldTime'
+  const cached = worldTimeCache.get<WorldTime>(cacheKey)
+  if (cached) return cached
+
   try {
     const worldTime = await backendRequest<BackendWorldTimeDto>("/api/world/time")
-    return {
+    const mapped = {
       gameTime: worldTime.gameTime,
       speed: worldTime.speed,
     }
+    worldTimeCache.set(cacheKey, mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] getWorldTime failed", error)
     return null
@@ -1198,10 +1332,13 @@ export async function setWorldTimeSpeed(speed: number): Promise<WorldTime | null
       method: "POST",
       body: JSON.stringify({ speed }),
     })
-    return {
+    const mapped = {
       gameTime: updated.gameTime,
       speed: updated.speed,
     }
+    // Обновляем кэш после изменения
+    worldTimeCache.set('worldTime', mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] setWorldTimeSpeed failed", error)
     return null
@@ -1214,10 +1351,12 @@ export async function advanceWorldTime(minutes: number): Promise<WorldTime | nul
       method: "POST",
       body: JSON.stringify({ minutes }),
     })
-    return {
+    const mapped = {
       gameTime: updated.gameTime,
       speed: updated.speed,
     }
+    worldTimeCache.set('worldTime', mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] advanceWorldTime failed", error)
     return null
@@ -1229,15 +1368,14 @@ export async function resetWorldSimulation(): Promise<WorldTime | null> {
     const updated = await backendRequest<BackendWorldTimeDto>("/api/world/time/reset", {
       method: "POST",
     })
-    return {
+    const mapped = {
       gameTime: updated.gameTime,
       speed: updated.speed,
     }
+    worldTimeCache.set('worldTime', mapped)
+    return mapped
   } catch (error) {
     console.warn("[data] resetWorldSimulation failed", error)
     return null
   }
 }
-
-
-
