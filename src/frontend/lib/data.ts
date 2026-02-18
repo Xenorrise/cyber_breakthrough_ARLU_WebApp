@@ -367,7 +367,7 @@ for (const event of MOCK_EVENTS) {
   MOCK_AGENT_MESSAGES.set(event.agentId, existing)
 }
 
-// ===== ДОСТУП К ДАННЫМ (замени на реальные запросы) =====
+// ===== ДОСТУП К ДАННЫМ =====
 
 interface BackendPersonalityTraits {
   openness?: number
@@ -905,12 +905,12 @@ class SimpleCache {
   }
 }
 
-// Создаём экземпляры кэша для разных типов данных
-const agentsCache = new SimpleCache(60 * 1000);        // 1 минута
-const eventsCache = new SimpleCache(60 * 1000);
-const relationshipsCache = new SimpleCache(60 * 1000);
-const statsCache = new SimpleCache(60 * 1000);
-const worldTimeCache = new SimpleCache(60 * 1000);
+// Создаём экземпляры кэша для разных типов данных 
+const agentsCache = new SimpleCache(15 * 1000);        // 1 минута
+const eventsCache = new SimpleCache(15 * 1000);
+const relationshipsCache = new SimpleCache(15 * 1000);
+const statsCache = new SimpleCache(15 * 1000);
+const worldTimeCache = new SimpleCache(15 * 1000);
 
 // Функции инвалидации кэша
 export function invalidateAgentsCache(): void {
