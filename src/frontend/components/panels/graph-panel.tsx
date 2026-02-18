@@ -194,35 +194,44 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
     if (!fg || physicsConfigured.current || !graphLoaded) return
     physicsConfigured.current = true
 
-    // Charge: nodes repel each other
-    fg.d3Force("charge")?.strength(-300).distanceMax(500)
+    // Отталкивание: узлы не слипаются
+    fg.d3Force("charge")?.strength(-250).distanceMax(400)
 
-    // Links: connected nodes attract with moderate strength
-    fg.d3Force("link")?.distance(120).strength(0.35)
+    // Связи: притягивают соединённые узлы
+    fg.d3Force("link")?.distance(100).strength(0.3)
 
-    // Center: weak gravity toward center -- keeps the cluster centered
-    fg.d3Force("center")?.strength(0.04)
+    // Центр: слабая гравитация к центру (удерживает кластер)
+    fg.d3Force("center")?.strength(0.03)
 
-    // Collision: prevent overlap (node radius 14 + padding = 30)
+    // Коллизии: узлы не перекрываются
     import("d3-force").then(({ forceCollide }) => {
-      fg.d3Force("collide", forceCollide(30).strength(1).iterations(4))
+      fg.d3Force("collide", forceCollide(28).strength(0.8).iterations(3))
       fg.d3ReheatSimulation()
     })
-
-    fg.d3ReheatSimulation()
   }, [graphLoaded])
 
-  // Обработать изменение размера (fullscreen toggle) -- центрировать и прогреть физику
+  // При resize -- только центрировать, НЕ перегревать физику
+  const prevDimensions = useRef({ width: 0, height: 0 })
   useEffect(() => {
     const fg = fgRef.current
     if (!fg || !graphLoaded || dimensions.width === 0) return
-    
-    // Небольшая задержка чтобы canvas успел обновиться
+
+    const prev = prevDimensions.current
+    // Пропустить первый рендер
+    if (prev.width === 0 && prev.height === 0) {
+      prevDimensions.current = { ...dimensions }
+      // Первый раз -- центрировать с задержкой
+      const t = setTimeout(() => fg.zoomToFit(600, 50), 300)
+      return () => clearTimeout(t)
+    }
+
+    // Debounce на 250мс чтобы не дергать при каждом кадре resize
+    prevDimensions.current = { ...dimensions }
     const timer = setTimeout(() => {
-      fg.zoomToFit(400, 40)
-      fg.d3ReheatSimulation()
-    }, 100)
-    
+      // Только центрировать, не перезапускать симуляцию
+      fg.zoomToFit(400, 50)
+    }, 250)
+
     return () => clearTimeout(timer)
   }, [dimensions, graphLoaded])
 
@@ -337,13 +346,14 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
   const handleNodeDragEnd = useCallback((node: Record<string, unknown>) => {
     const n = node as unknown as GraphNode
     n.__dragging = false
-    // Release back to physics after a short delay
+    // Отпустить ноду в физику + прогреть симуляцию для перестроения
     setTimeout(() => {
       if (!n.__dragging) {
-        n.fx = undefined as unknown as null
-        n.fy = undefined as unknown as null
+        n.fx = null
+        n.fy = null
+        fgRef.current?.d3ReheatSimulation()
       }
-    }, 300)
+    }, 200)
   }, [])
 
   return (
@@ -377,9 +387,9 @@ export function GraphPanel({ onSelectAgent, fromGraph }: { onSelectAgent?: (agen
           width={dimensions.width}
           height={dimensions.height}
           backgroundColor="transparent"
-          // Physics: never stop
-          d3AlphaDecay={0.005}
-          d3VelocityDecay={0.25}
+          // Физика: медленное затухание, симуляция живёт долго
+          d3AlphaDecay={0.02}
+          d3VelocityDecay={0.3}
           warmupTicks={0}
           cooldownTime={Infinity}
           // Nodes
