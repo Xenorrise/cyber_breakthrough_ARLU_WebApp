@@ -130,7 +130,7 @@ export default function Home() {
           />
         )
       case "messages":
-        return <MessagesPanel />
+        return <MessagesPanel refreshToken={refreshToken} />
       default:
         return null
     }

@@ -167,6 +167,54 @@ public sealed class UserAgentsService(
         };
     }
 
+    public async Task<PagedResultDto<AgentMessageDto>> GetMessagesAsync(
+        string userId,
+        int limitPerAgent,
+        CancellationToken cancellationToken)
+    {
+        await worldSimulationService.EnsureUserWorldAsync(userId, cancellationToken);
+
+        var safeLimitPerAgent = Math.Clamp(limitPerAgent, 1, 200);
+        var ownedAgentIds = await dbContext.Agents
+            .Where(x => x.UserId == userId && !x.IsArchived)
+            .Select(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+
+        if (ownedAgentIds.Length == 0)
+        {
+            return new PagedResultDto<AgentMessageDto>
+            {
+                Items = Array.Empty<AgentMessageDto>(),
+                Pagination = new PaginationDto
+                {
+                    Limit = safeLimitPerAgent,
+                    Returned = 0
+                }
+            };
+        }
+
+        var recentMessages = await dbContext.AgentMessages
+            .Where(x => x.UserId == userId && ownedAgentIds.Contains(x.AgentId))
+            .OrderByDescending(x => x.CreatedAt)
+            .ToArrayAsync(cancellationToken);
+
+        var items = recentMessages
+            .GroupBy(x => x.AgentId)
+            .SelectMany(group => group.Take(safeLimitPerAgent))
+            .OrderBy(x => x.CreatedAt)
+            .ToArray();
+
+        return new PagedResultDto<AgentMessageDto>
+        {
+            Items = items.Select(ToAgentMessageDto).ToArray(),
+            Pagination = new PaginationDto
+            {
+                Limit = safeLimitPerAgent,
+                Returned = items.Length
+            }
+        };
+    }
+
     public Task<AgentStatusDto> PauseAgentAsync(string userId, Guid agentId, CancellationToken cancellationToken)
         => TransitionStatusAsync(userId, agentId, AgentStatuses.Paused, cancellationToken);
 
@@ -246,6 +294,68 @@ public sealed class UserAgentsService(
             CorrelationId = correlationId,
             Status = AgentStatuses.Working,
             AcceptedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    public async Task<BroadcastCommandAckDto> BroadcastCommandAsync(
+        string userId,
+        BroadcastAgentCommandRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        await worldSimulationService.EnsureUserWorldAsync(userId, cancellationToken);
+
+        var targetAgentIds = request.AgentIds is { Count: > 0 }
+            ? request.AgentIds.Distinct().ToArray()
+            : await dbContext.Agents
+                .Where(x => x.UserId == userId && !x.IsArchived)
+                .OrderByDescending(x => x.LastActiveAt)
+                .Select(x => x.Id)
+                .ToArrayAsync(cancellationToken);
+
+        var items = new List<BroadcastCommandItemDto>(targetAgentIds.Length);
+        foreach (var targetAgentId in targetAgentIds)
+        {
+            try
+            {
+                var accepted = await CommandAgentAsync(
+                    userId,
+                    targetAgentId,
+                    new CommandAgentRequestDto
+                    {
+                        Command = request.Command,
+                        Message = request.Message,
+                        CorrelationId = request.CorrelationId
+                    },
+                    cancellationToken);
+
+                items.Add(new BroadcastCommandItemDto
+                {
+                    AgentId = targetAgentId,
+                    Status = "accepted",
+                    CorrelationId = accepted.CorrelationId
+                });
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+            {
+                items.Add(new BroadcastCommandItemDto
+                {
+                    AgentId = targetAgentId,
+                    Status = "rejected",
+                    Reason = ex.Message
+                });
+            }
+        }
+
+        var acceptedCount = items.Count(x => string.Equals(x.Status, "accepted", StringComparison.OrdinalIgnoreCase));
+        var rejectedCount = items.Count - acceptedCount;
+
+        return new BroadcastCommandAckDto
+        {
+            UserId = userId,
+            AcceptedAt = DateTimeOffset.UtcNow,
+            AcceptedCount = acceptedCount,
+            RejectedCount = rejectedCount,
+            Items = items
         };
     }
 

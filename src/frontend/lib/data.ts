@@ -28,6 +28,41 @@ export interface AgentEvent {
   timestamp: string     // ISO
 }
 
+export type AgentMessageRole = "user" | "assistant" | "system"
+
+export interface AgentConversationMessage {
+  id: string
+  agentId: string
+  agentName: string
+  role: AgentMessageRole
+  content: string
+  timestamp: string
+  correlationId?: string
+}
+
+export interface CommandAck {
+  agentId: string
+  userId: string
+  correlationId: string
+  status: string
+  acceptedAt: string
+}
+
+export interface BroadcastCommandItem {
+  agentId: string
+  status: string
+  correlationId?: string
+  reason?: string
+}
+
+export interface BroadcastCommandAck {
+  userId: string
+  acceptedAt: string
+  acceptedCount: number
+  rejectedCount: number
+  items: BroadcastCommandItem[]
+}
+
 export interface Relationship {
   from: string          // agent id
   to: string            // agent id
@@ -317,6 +352,23 @@ export const MOCK_STATS: WorldStats = {
   ],
 }
 
+const MOCK_AGENT_MESSAGES = new Map<string, AgentConversationMessage[]>(
+  MOCK_AGENTS.map((agent) => [agent.id, []])
+)
+
+for (const event of MOCK_EVENTS) {
+  const existing = MOCK_AGENT_MESSAGES.get(event.agentId) ?? []
+  existing.push({
+    id: `mock-msg-${event.id}`,
+    agentId: event.agentId,
+    agentName: event.agentName,
+    role: "assistant",
+    content: event.text,
+    timestamp: event.timestamp,
+  })
+  MOCK_AGENT_MESSAGES.set(event.agentId, existing)
+}
+
 // ===== ДОСТУП К ДАННЫМ (замени на реальные запросы) =====
 
 interface BackendPersonalityTraits {
@@ -371,6 +423,48 @@ interface BackendWorldStatsDto {
 interface BackendWorldTimeDto {
   gameTime: string
   speed: number
+}
+
+interface BackendAgentMessageDto {
+  messageId: string
+  agentId: string
+  userId: string
+  threadId: string
+  role: string
+  content: string
+  createdAt: string
+  correlationId?: string
+}
+
+interface BackendPagedResultDto<TItem> {
+  items: TItem[]
+  pagination: {
+    limit: number
+    returned: number
+  }
+}
+
+interface BackendCommandAckDto {
+  agentId: string
+  userId: string
+  correlationId: string
+  status: string
+  acceptedAt: string
+}
+
+interface BackendBroadcastCommandItemDto {
+  agentId: string
+  status: string
+  correlationId?: string
+  reason?: string
+}
+
+interface BackendBroadcastCommandAckDto {
+  userId: string
+  acceptedAt: string
+  acceptedCount: number
+  rejectedCount: number
+  items: BackendBroadcastCommandItemDto[]
 }
 
 const BACKEND_API_BASE = "/api/backend"
@@ -535,6 +629,30 @@ function mapBackendEvent(event: BackendEventDto, agentsById: Map<string, Agent>)
   }
 }
 
+function normalizeMessageRole(roleRaw: string): AgentMessageRole {
+  const role = roleRaw.trim().toLowerCase()
+  if (role === "user" || role === "assistant" || role === "system") {
+    return role
+  }
+
+  return "assistant"
+}
+
+function mapBackendMessage(
+  message: BackendAgentMessageDto,
+  agentsById: Map<string, Agent>
+): AgentConversationMessage {
+  return {
+    id: message.messageId,
+    agentId: message.agentId,
+    agentName: agentsById.get(message.agentId)?.name ?? "Agent",
+    role: normalizeMessageRole(message.role),
+    content: message.content,
+    timestamp: message.createdAt,
+    correlationId: message.correlationId,
+  }
+}
+
 function buildRelationshipsFromEvents(events: AgentEvent[], agents: Agent[]): Relationship[] {
   const existingIds = new Set(agents.map((a) => a.id))
   const relCounts = new Map<string, number>()
@@ -678,6 +796,197 @@ export async function addEvent(text: string): Promise<boolean> {
   } catch (error) {
     console.warn("[data] addEvent fallback, backend unavailable", error)
     return false
+  }
+}
+
+function getMockAgentName(agentId: string): string {
+  return MOCK_AGENTS.find((agent) => agent.id === agentId)?.name ?? agentId
+}
+
+function getMockAgentMessages(agentId: string, limit: number): AgentConversationMessage[] {
+  const source = MOCK_AGENT_MESSAGES.get(agentId) ?? []
+  return source.slice(-limit)
+}
+
+function getAllMockAgentMessages(limitPerAgent: number): AgentConversationMessage[] {
+  const combined = Array.from(MOCK_AGENT_MESSAGES.values())
+    .flatMap((messages) => messages.slice(-limitPerAgent))
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+  return combined
+}
+
+function pushMockConversationMessage(agentId: string, role: AgentMessageRole, content: string, correlationId: string): void {
+  const target = MOCK_AGENT_MESSAGES.get(agentId) ?? []
+  target.push({
+    id: `mock-msg-${Math.random().toString(36).slice(2, 10)}`,
+    agentId,
+    agentName: getMockAgentName(agentId),
+    role,
+    content,
+    timestamp: new Date().toISOString(),
+    correlationId,
+  })
+  MOCK_AGENT_MESSAGES.set(agentId, target)
+}
+
+export async function getAgentMessages(agentId: string, limit = 80): Promise<AgentConversationMessage[]> {
+  const trimmedId = agentId.trim()
+  if (!trimmedId) {
+    return []
+  }
+
+  try {
+    const [paged, agents] = await Promise.all([
+      backendRequest<BackendPagedResultDto<BackendAgentMessageDto>>(
+        `/api/user-agents/${encodeURIComponent(trimmedId)}/messages?limit=${Math.max(1, Math.floor(limit))}`
+      ),
+      getAgents(),
+    ])
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+    return paged.items.map((message) => mapBackendMessage(message, agentsById))
+  } catch (error) {
+    console.warn("[data] getAgentMessages fallback to mock", error)
+    return getMockAgentMessages(trimmedId, Math.max(1, Math.floor(limit)))
+  }
+}
+
+export async function getAllAgentMessages(limitPerAgent = 20): Promise<AgentConversationMessage[]> {
+  const safeLimit = Math.max(1, Math.floor(limitPerAgent))
+  try {
+    const [paged, agents] = await Promise.all([
+      backendRequest<BackendPagedResultDto<BackendAgentMessageDto>>(
+        `/api/user-agents/messages?limitPerAgent=${safeLimit}`
+      ),
+      getAgents(),
+    ])
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+    return paged.items.map((message) => mapBackendMessage(message, agentsById))
+  } catch (error) {
+    console.warn("[data] getAllAgentMessages fallback to mock", error)
+    return getAllMockAgentMessages(safeLimit)
+  }
+}
+
+export async function commandAgent(
+  agentId: string,
+  message: string,
+  command?: string
+): Promise<CommandAck | null> {
+  const trimmedAgentId = agentId.trim()
+  const trimmedMessage = message.trim()
+  const trimmedCommand = command?.trim()
+
+  if (!trimmedAgentId || (!trimmedMessage && !trimmedCommand)) {
+    return null
+  }
+
+  const payload = {
+    command: trimmedCommand || undefined,
+    message: trimmedMessage || undefined,
+  }
+
+  try {
+    const accepted = await backendRequest<BackendCommandAckDto>(
+      `/api/user-agents/${encodeURIComponent(trimmedAgentId)}/commands`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    )
+
+    return {
+      agentId: accepted.agentId,
+      userId: accepted.userId,
+      correlationId: accepted.correlationId,
+      status: accepted.status,
+      acceptedAt: accepted.acceptedAt,
+    }
+  } catch (error) {
+    console.warn("[data] commandAgent fallback to mock", error)
+    const correlationId = `mock-${Date.now().toString(36)}`
+    const userText = [trimmedCommand, trimmedMessage].filter(Boolean).join("\n")
+    pushMockConversationMessage(trimmedAgentId, "user", userText, correlationId)
+    pushMockConversationMessage(
+      trimmedAgentId,
+      "assistant",
+      `${getMockAgentName(trimmedAgentId)} получил команду и готов действовать.`,
+      correlationId
+    )
+    return {
+      agentId: trimmedAgentId,
+      userId: getUserId(),
+      correlationId,
+      status: "Working",
+      acceptedAt: new Date().toISOString(),
+    }
+  }
+}
+
+export async function broadcastAgentCommand(
+  message: string,
+  options?: { command?: string; agentIds?: string[] }
+): Promise<BroadcastCommandAck | null> {
+  const trimmedMessage = message.trim()
+  const trimmedCommand = options?.command?.trim()
+  if (!trimmedMessage && !trimmedCommand) {
+    return null
+  }
+
+  const payload = {
+    command: trimmedCommand || undefined,
+    message: trimmedMessage || undefined,
+    agentIds: options?.agentIds && options.agentIds.length > 0 ? options.agentIds : undefined,
+  }
+
+  try {
+    const accepted = await backendRequest<BackendBroadcastCommandAckDto>(
+      "/api/user-agents/commands/broadcast",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    )
+
+    return {
+      userId: accepted.userId,
+      acceptedAt: accepted.acceptedAt,
+      acceptedCount: accepted.acceptedCount,
+      rejectedCount: accepted.rejectedCount,
+      items: accepted.items.map((item) => ({
+        agentId: item.agentId,
+        status: item.status,
+        correlationId: item.correlationId,
+        reason: item.reason,
+      })),
+    }
+  } catch (error) {
+    console.warn("[data] broadcastAgentCommand fallback to mock", error)
+    const targetAgentIds = options?.agentIds?.filter((id) => id.trim().length > 0) ?? MOCK_AGENTS.map((agent) => agent.id)
+    const correlationBase = `mock-${Date.now().toString(36)}`
+    const items = targetAgentIds.map((agentId, index) => {
+      const correlationId = `${correlationBase}-${index + 1}`
+      const userText = [trimmedCommand, trimmedMessage].filter(Boolean).join("\n")
+      pushMockConversationMessage(agentId, "user", userText, correlationId)
+      pushMockConversationMessage(
+        agentId,
+        "assistant",
+        `${getMockAgentName(agentId)} получил общий сигнал и приступает к задаче.`,
+        correlationId
+      )
+      return {
+        agentId,
+        status: "accepted",
+        correlationId,
+      } satisfies BroadcastCommandItem
+    })
+
+    return {
+      userId: getUserId(),
+      acceptedAt: new Date().toISOString(),
+      acceptedCount: items.length,
+      rejectedCount: 0,
+      items,
+    }
   }
 }
 

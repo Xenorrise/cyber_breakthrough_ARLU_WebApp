@@ -55,6 +55,17 @@ public sealed class UserAgentsController(
         }
     }
 
+    [HttpGet("messages")]
+    [ProducesResponseType(typeof(PagedResultDto<AgentMessageDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResultDto<AgentMessageDto>>> GetMessagesForAllAgents(
+        [FromQuery] int limitPerAgent = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = ResolveUserId();
+        var messages = await userAgentsService.GetMessagesAsync(userId, limitPerAgent, cancellationToken);
+        return Ok(messages);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(AgentDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -134,6 +145,18 @@ public sealed class UserAgentsController(
                 AgentId = agentId
             });
         }
+    }
+
+    [HttpPost("commands/broadcast")]
+    [ProducesResponseType(typeof(BroadcastCommandAckDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BroadcastCommandAckDto>> BroadcastCommand(
+        [FromBody] BroadcastAgentCommandRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = ResolveUserId();
+        var accepted = await userAgentsService.BroadcastCommandAsync(userId, request, cancellationToken);
+        return Accepted(accepted);
     }
 
     [HttpPost("{agentId:guid}/pause")]
