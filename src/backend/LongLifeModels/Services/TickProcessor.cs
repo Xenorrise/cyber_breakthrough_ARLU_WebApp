@@ -4,6 +4,7 @@ using LongLifeModels.DTOs;
 using LongLifeModels.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace LongLifeModels.Services;
 
@@ -58,6 +59,7 @@ public sealed class TickProcessor(
         var dbContext = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
         var agentBrain = scope.ServiceProvider.GetRequiredService<AgentBrain>();
         var notifier = scope.ServiceProvider.GetRequiredService<IAgentRealtimeNotifier>();
+        var eventService = scope.ServiceProvider.GetRequiredService<IEventService>();
 
         var agent = await dbContext.Agents
             .FirstOrDefaultAsync(x => x.Id == agentId && !x.IsArchived, ct);
@@ -80,7 +82,8 @@ public sealed class TickProcessor(
 
         var correlationId = lastUserMessage?.CorrelationId;
         var worldTime = await worldSimulationService.GetWorldTimeAsync(agent.UserId, ct);
-        var worldContext = BuildWorldContext(agent, lastUserMessage?.Content, worldTime.GameTime);
+        var incomingCommand = ParseIncomingCommand(lastUserMessage?.Content);
+        var worldContext = BuildWorldContext(agent, incomingCommand, worldTime.GameTime);
 
         await notifier.NotifyAgentProgressAsync(
             agent.UserId,
@@ -114,6 +117,42 @@ public sealed class TickProcessor(
             agent.Status = AgentStatuses.Idle;
             agent.LastActiveAt = DateTimeOffset.UtcNow;
             await dbContext.SaveChangesAsync(ct);
+
+            var reactionText = BuildReactionText(result.Action);
+            var reactionPayload = JsonSerializer.SerializeToElement(new
+            {
+                agentId = agent.Id,
+                agentName = agent.Name,
+                text = reactionText,
+                message = reactionText,
+                sourceMessage = incomingCommand.Text,
+                sourceCommand = incomingCommand.Command,
+                rawResponse = result.Action,
+                gameTime = worldTime.GameTime.ToString("O"),
+                correlationId
+            });
+
+            try
+            {
+                await eventService.CreateAsync(
+                    new CreateEventRequestDto
+                    {
+                        Type = "agent.message",
+                        Payload = reactionPayload,
+                        OccurredAt = assistantMessage.CreatedAt
+                    },
+                    agent.UserId,
+                    assistantMessage.CreatedAt,
+                    ct);
+            }
+            catch (Exception eventWriteError)
+            {
+                logger.LogWarning(
+                    eventWriteError,
+                    "Failed to persist reaction event for agent {AgentId}, correlation {CorrelationId}.",
+                    agent.Id,
+                    correlationId);
+            }
 
             await notifier.NotifyAgentThoughtAsync(
                 agent.UserId,
@@ -172,6 +211,40 @@ public sealed class TickProcessor(
 
             logger.LogError(ex, "Tick processing failed for agent {AgentId}.", agent.Id);
 
+            var errorPayload = JsonSerializer.SerializeToElement(new
+            {
+                agentId = agent.Id,
+                agentName = agent.Name,
+                text = $"{agent.Name} не смог обработать событие: {ex.Message}",
+                message = $"{agent.Name} не смог обработать событие: {ex.Message}",
+                sourceMessage = incomingCommand.Text,
+                sourceCommand = incomingCommand.Command,
+                gameTime = worldTime.GameTime.ToString("O"),
+                correlationId
+            });
+
+            try
+            {
+                await eventService.CreateAsync(
+                    new CreateEventRequestDto
+                    {
+                        Type = "agent.error",
+                        Payload = errorPayload,
+                        OccurredAt = DateTimeOffset.UtcNow
+                    },
+                    agent.UserId,
+                    null,
+                    ct);
+            }
+            catch (Exception eventWriteError)
+            {
+                logger.LogWarning(
+                    eventWriteError,
+                    "Failed to persist error event for agent {AgentId}, correlation {CorrelationId}.",
+                    agent.Id,
+                    correlationId);
+            }
+
             await notifier.NotifyAgentStatusChangedAsync(
                 agent.UserId,
                 new AgentStatusDto
@@ -204,15 +277,66 @@ public sealed class TickProcessor(
         }
     }
 
-    private string BuildWorldContext(Agent agent, string? lastMessage, DateTimeOffset gameTime)
+    private string BuildWorldContext(Agent agent, IncomingCommand incomingCommand, DateTimeOffset gameTime)
     {
-        var context = $"Simulation time: {gameTime:yyyy-MM-dd HH:mm:ss}. Agent state: {agent.State}. Emotion: {agent.CurrentEmotion}. Last user message: {lastMessage ?? "(empty)"}";
+        var sourceText = string.IsNullOrWhiteSpace(incomingCommand.Text) ? "(empty)" : incomingCommand.Text;
+        var sourcePrefix = incomingCommand.IsWorldUpdate ? "Incoming world event" : "Last user message";
+        var context = $"Simulation time: {gameTime:yyyy-MM-dd HH:mm:ss}. Agent state: {agent.State}. Emotion: {agent.CurrentEmotion}. {sourcePrefix}: {sourceText}";
         if (context.Length <= _config.WorldContextMaxLength)
         {
             return context;
         }
 
         return context[.._config.WorldContextMaxLength];
+    }
+
+    private static IncomingCommand ParseIncomingCommand(string? rawMessage)
+    {
+        if (string.IsNullOrWhiteSpace(rawMessage))
+        {
+            return new IncomingCommand(Command: null, Text: null, IsWorldUpdate: false);
+        }
+
+        var lines = rawMessage
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray();
+
+        if (lines.Length == 0)
+        {
+            return new IncomingCommand(Command: null, Text: null, IsWorldUpdate: false);
+        }
+
+        var command = lines[0];
+        var text = lines.Length > 1 ? string.Join(" ", lines.Skip(1)) : command;
+        var isWorldUpdate = string.Equals(command, "world.update", StringComparison.OrdinalIgnoreCase);
+        return new IncomingCommand(command, text, isWorldUpdate);
+    }
+
+    private static string BuildReactionText(string rawAction)
+    {
+        if (string.IsNullOrWhiteSpace(rawAction))
+        {
+            return "Агент обработал событие.";
+        }
+
+        var lines = rawAction.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var line in lines)
+        {
+            if (!line.StartsWith("ActionText:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var extracted = line["ActionText:".Length..].Trim();
+            if (!string.IsNullOrWhiteSpace(extracted))
+            {
+                return extracted.Length <= 220 ? extracted : $"{extracted[..217]}...";
+            }
+        }
+
+        var compact = rawAction.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        return compact.Length <= 220 ? compact : $"{compact[..217]}...";
     }
 
     private static AgentMessageDto ToMessageDto(AgentMessage message)
@@ -261,4 +385,6 @@ public sealed class TickProcessor(
             })
             .ToArray();
     }
+
+    private sealed record IncomingCommand(string? Command, string? Text, bool IsWorldUpdate);
 }
