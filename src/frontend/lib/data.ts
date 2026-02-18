@@ -1,0 +1,1243 @@
+﻿/**
+ * Слой данных -- типы и моки.
+ * Сейчас захардкожено, при подключении БД замени getAgents(), getEvents() и т.д.
+ * Компоненты трогать не нужно -- зависят только от типов.
+ */
+
+// ===== ТИПЫ =====
+
+export type Mood = "happy" | "neutral" | "sad" | "angry" | "excited" | "anxious"
+
+export interface Agent {
+  id: string
+  name: string
+  avatar: string        // аватар буква/эмо
+  mood: Mood
+  traits: string[]      // черты
+  description: string
+  currentPlan: string
+  memories: string[]    // воспоминания
+}
+
+export interface AgentEvent {
+  id: string
+  agentId: string
+  agentName: string
+  type: "chat" | "action" | "emotion" | "system"
+  text: string
+  timestamp: string     // ISO
+}
+
+export type AgentMessageRole = "user" | "assistant" | "system"
+
+export interface AgentConversationMessage {
+  id: string
+  agentId: string
+  agentName: string
+  role: AgentMessageRole
+  content: string
+  timestamp: string
+  correlationId?: string
+}
+
+export interface CommandAck {
+  agentId: string
+  userId: string
+  correlationId: string
+  status: string
+  acceptedAt: string
+}
+
+export interface BroadcastCommandItem {
+  agentId: string
+  status: string
+  correlationId?: string
+  reason?: string
+}
+
+export interface BroadcastCommandAck {
+  userId: string
+  acceptedAt: string
+  acceptedCount: number
+  rejectedCount: number
+  items: BroadcastCommandItem[]
+}
+
+export interface Relationship {
+  from: string          // agent id
+  to: string            // agent id
+  sentiment: number     // -1 (враг) до 1 (друг)
+  label?: string        // "друзья", "враги", "знакомые"
+}
+
+export interface WorldStats {
+  totalEvents: number
+  totalConversations: number
+  avgMood: number       // 0-1
+  mostActiveAgent: string
+  topRelationship: { from: string; to: string; sentiment: number }
+  eventsByType: { type: string; count: number }[]
+  moodDistribution: { mood: Mood; count: number }[]
+}
+
+// ===== НАСТРОЕНИЯ =====
+
+export const MOOD_CONFIG: Record<Mood, { color: string; label: string }> = {
+  happy:   { color: "#4ade80", label: "Счастлив" },
+  neutral: { color: "#a0a0b0", label: "Нейтрален" },
+  sad:     { color: "#60a5fa", label: "Грустит" },
+  angry:   { color: "#f87171", label: "Злится" },
+  excited: { color: "#e5c34b", label: "Воодушевлён" },
+  anxious: { color: "#c084fc", label: "Тревожится" },
+}
+
+// ===== МОКСИ =====
+
+export const MOCK_AGENTS: Agent[] = [
+  {
+    id: "agent-1",
+    name: "Алексей",
+    avatar: "А",
+    mood: "happy",
+    traits: ["общительный", "оптимист", "любопытный"],
+    description: "Молодой исследователь, который всегда ищет новые знакомства. Верит в лучшее в людях.",
+    currentPlan: "Поговорить с Мариной о вчерашнем событии",
+    memories: [
+      "Встретил Марину на площади",
+      "Поспорил с Виктором о политике",
+      "Нашёл старую книгу в библиотеке",
+    ],
+  },
+  {
+    id: "agent-2",
+    name: "Марина",
+    avatar: "М",
+    mood: "neutral",
+    traits: ["задумчивая", "художница", "интроверт"],
+    description: "Талантливая художница, предпочитает одиночество. Наблюдает за миром через призму искусства.",
+    currentPlan: "Закончить картину заката",
+    memories: [
+      "Разговор с Алексеем был приятным",
+      "Виктор показался грубым",
+      "Увидела красивый закат",
+    ],
+  },
+  {
+    id: "agent-3",
+    name: "Виктор",
+    avatar: "В",
+    mood: "angry",
+    traits: ["прямолинейный", "амбициозный", "упрямый"],
+    description: "Бывший военный, привык командовать. Не терпит слабости, но глубоко внутри одинок.",
+    currentPlan: "Доказать свою правоту Алексею",
+    memories: [
+      "Спор с Алексеем закончился ничем",
+      "Марина отвернулась при встрече",
+      "Вспомнил службу в армии",
+    ],
+  },
+  {
+    id: "agent-4",
+    name: "Елена",
+    avatar: "Е",
+    mood: "excited",
+    traits: ["энергичная", "лидер", "эмпат"],
+    description: "Врач по профессии и миротворец по натуре. Старается помирить всех вокруг.",
+    currentPlan: "Организовать общий ужин для всех",
+    memories: [
+      "Помогла незнакомцу на улице",
+      "Заметила напряжение между Виктором и Алексеем",
+      "Получила письмо от старого друга",
+    ],
+  },
+  {
+    id: "agent-5",
+    name: "Дмитрий",
+    avatar: "Д",
+    mood: "sad",
+    traits: ["замкнутый", "умный", "меланхоличный"],
+    description: "Бывший учёный, потерял лабораторию в пожаре. Живёт на окраине и избегает людей.",
+    currentPlan: "Попытаться восстановить записи из сгоревшей лаборатории",
+    memories: [
+      "Пожар уничтожил десять лет работы",
+      "Марина однажды принесла еду",
+      "Не доверяет Виктору",
+    ],
+  },
+  {
+    id: "agent-6",
+    name: "Ольга",
+    avatar: "О",
+    mood: "anxious",
+    traits: ["осторожная", "наблюдательная", "скрытная"],
+    description: "Торговка на рынке. Знает все сплетни города, но сама держит много секретов.",
+    currentPlan: "Разузнать, что случилось на площади вчера ночью",
+    memories: [
+      "Видела Виктора в переулке поздно ночью",
+      "Елена покупает у неё травы каждую неделю",
+      "Кто-то следит за ней -- уверена",
+    ],
+  },
+  {
+    id: "agent-7",
+    name: "Игорь",
+    avatar: "И",
+    mood: "neutral",
+    traits: ["спокойный", "справедливый", "старомодный"],
+    description: "Пожилой сторож библиотеки. Видел многое, говорит мало, но когда говорит -- все слушают.",
+    currentPlan: "Присматривать за библиотекой и читать хроники",
+    memories: [
+      "Алексей часто приходит читать",
+      "Помнит, каким был город до войны",
+      "Не одобряет поведение Виктора",
+    ],
+  },
+  {
+    id: "agent-8",
+    name: "Настя",
+    avatar: "Н",
+    mood: "happy",
+    traits: ["жизнерадостная", "наивная", "творческая"],
+    description: "Студентка-музыкант, недавно приехала в город. Ещё не знает местных интриг.",
+    currentPlan: "Найти место для репетиции и познакомиться с людьми",
+    memories: [
+      "Город показался красивым, но странным",
+      "Марина улыбнулась ей на улице",
+      "Услышала громкий спор на площади",
+    ],
+  },
+]
+
+export const MOCK_EVENTS: AgentEvent[] = [
+  {
+    id: "evt-1",
+    agentId: "agent-1",
+    agentName: "Алексей",
+    type: "chat",
+    text: "Привет, Марина! Как твоя новая картина?",
+    timestamp: new Date(Date.now() - 300000).toISOString(),
+  },
+  {
+    id: "evt-2",
+    agentId: "agent-2",
+    agentName: "Марина",
+    type: "emotion",
+    text: "Почувствовала прилив вдохновения от заката",
+    timestamp: new Date(Date.now() - 240000).toISOString(),
+  },
+  {
+    id: "evt-3",
+    agentId: "agent-3",
+    agentName: "Виктор",
+    type: "action",
+    text: "Отправился на площадь, чтобы найти Алексея",
+    timestamp: new Date(Date.now() - 180000).toISOString(),
+  },
+  {
+    id: "evt-4",
+    agentId: "agent-4",
+    agentName: "Елена",
+    type: "chat",
+    text: "Виктор, давай поговорим спокойно. Я уверена, вы с Алексеем найдёте общий язык.",
+    timestamp: new Date(Date.now() - 120000).toISOString(),
+  },
+  {
+    id: "evt-5",
+    agentId: "agent-3",
+    agentName: "Виктор",
+    type: "emotion",
+    text: "Раздражён: Елена снова лезет не в своё дело",
+    timestamp: new Date(Date.now() - 60000).toISOString(),
+  },
+  {
+    id: "evt-6",
+    agentId: "agent-1",
+    agentName: "Алексей",
+    type: "action",
+    text: "Зашёл в библиотеку и нашёл интересную книгу об истории города",
+    timestamp: new Date(Date.now() - 30000).toISOString(),
+  },
+  {
+    id: "evt-7",
+    agentId: "agent-2",
+    agentName: "Марина",
+    type: "action",
+    text: "Поставила мольберт у реки и начала рисовать",
+    timestamp: new Date(Date.now() - 15000).toISOString(),
+  },
+  {
+    id: "evt-8",
+    agentId: "agent-4",
+    agentName: "Елена",
+    type: "system",
+    text: "Решила организовать общий ужин сегодня вечером",
+    timestamp: new Date(Date.now() - 5000).toISOString(),
+  },
+  {
+    id: "evt-9",
+    agentId: "agent-5",
+    agentName: "Дмитрий",
+    type: "action",
+    text: "Нашёл обгоревший дневник среди руин лаборатории",
+    timestamp: new Date(Date.now() - 280000).toISOString(),
+  },
+  {
+    id: "evt-10",
+    agentId: "agent-6",
+    agentName: "Ольга",
+    type: "emotion",
+    text: "Тревога нарастает -- кто-то определённо следит",
+    timestamp: new Date(Date.now() - 200000).toISOString(),
+  },
+  {
+    id: "evt-11",
+    agentId: "agent-7",
+    agentName: "Игорь",
+    type: "action",
+    text: "Открыл старый архив в подвале библиотеки",
+    timestamp: new Date(Date.now() - 150000).toISOString(),
+  },
+  {
+    id: "evt-12",
+    agentId: "agent-8",
+    agentName: "Настя",
+    type: "chat",
+    text: "Простите, вы не подскажете, где тут можно порепетировать?",
+    timestamp: new Date(Date.now() - 90000).toISOString(),
+  },
+]
+
+export const MOCK_RELATIONSHIPS: Relationship[] = [
+  // Алексей
+  { from: "agent-1", to: "agent-2", sentiment: 0.7, label: "дружба" },
+  { from: "agent-1", to: "agent-3", sentiment: -0.4, label: "конфликт" },
+  { from: "agent-1", to: "agent-7", sentiment: 0.4, label: "уважение" },
+  // Марина
+  { from: "agent-2", to: "agent-5", sentiment: 0.3, label: "сочувствие" },
+  { from: "agent-2", to: "agent-8", sentiment: 0.5, label: "симпатия" },
+  // Виктор
+  { from: "agent-3", to: "agent-4", sentiment: -0.2, label: "раздражение" },
+  { from: "agent-3", to: "agent-7", sentiment: -0.3, label: "неприязнь" },
+  // Елена
+  { from: "agent-4", to: "agent-6", sentiment: 0.4, label: "торговля" },
+  { from: "agent-4", to: "agent-1", sentiment: 0.5, label: "знакомые" },
+  // Ольга
+  { from: "agent-6", to: "agent-3", sentiment: -0.1, label: "подозрение" },
+  // Игорь -- одиночка, мало связей
+  // Настя -- новенькая, только одна связь
+  { from: "agent-8", to: "agent-1", sentiment: 0.2, label: "знакомые" },
+  // Дмитрий -- затворник, почти нет связей
+  { from: "agent-5", to: "agent-7", sentiment: 0.2, label: "соседи" },
+]
+
+export const MOCK_STATS: WorldStats = {
+  totalEvents: 847,
+  totalConversations: 234,
+  avgMood: 0.62,
+  mostActiveAgent: "Алексей",
+  topRelationship: { from: "agent-1", to: "agent-2", sentiment: 0.7 },
+  eventsByType: [
+    { type: "chat", count: 312 },
+    { type: "action", count: 289 },
+    { type: "emotion", count: 178 },
+    { type: "system", count: 68 },
+  ],
+  moodDistribution: [
+    { mood: "happy", count: 2 },
+    { mood: "neutral", count: 2 },
+    { mood: "sad", count: 1 },
+    { mood: "angry", count: 1 },
+    { mood: "excited", count: 1 },
+    { mood: "anxious", count: 1 },
+  ],
+}
+
+const MOCK_AGENT_MESSAGES = new Map<string, AgentConversationMessage[]>(
+  MOCK_AGENTS.map((agent) => [agent.id, []])
+)
+
+for (const event of MOCK_EVENTS) {
+  const existing = MOCK_AGENT_MESSAGES.get(event.agentId) ?? []
+  existing.push({
+    id: `mock-msg-${event.id}`,
+    agentId: event.agentId,
+    agentName: event.agentName,
+    role: "assistant",
+    content: event.text,
+    timestamp: event.timestamp,
+  })
+  MOCK_AGENT_MESSAGES.set(event.agentId, existing)
+}
+
+// ===== ДОСТУП К ДАННЫМ (замени на реальные запросы) =====
+
+interface BackendPersonalityTraits {
+  openness?: number
+  conscientiousness?: number
+  extraversion?: number
+  agreeableness?: number
+  neuroticism?: number
+}
+
+interface BackendAgentDto {
+  agentId: string
+  userId: string
+  name: string
+  model: string
+  status: string
+  state: string
+  energy: number
+  personalityTraits?: BackendPersonalityTraits
+  description?: string
+  emotion?: string
+  traits?: string[]
+  memories?: string[]
+  currentPlan?: string
+}
+
+interface BackendEventDto {
+  id: string
+  userId?: string
+  type: string
+  payload: unknown
+  createdAt: string
+}
+
+interface BackendRelationshipDto {
+  from: string
+  to: string
+  sentiment: number
+  label?: string
+}
+
+interface BackendWorldStatsDto {
+  totalEvents: number
+  totalConversations: number
+  avgMood: number
+  mostActiveAgent: string
+  topRelationship: { from: string; to: string; sentiment: number }
+  eventsByType: { type: string; count: number }[]
+  moodDistribution: { mood: string; count: number }[]
+}
+
+interface BackendWorldTimeDto {
+  gameTime: string
+  speed: number
+}
+
+interface BackendAgentMessageDto {
+  messageId: string
+  agentId: string
+  userId: string
+  threadId: string
+  role: string
+  content: string
+  createdAt: string
+  correlationId?: string
+}
+
+interface BackendPagedResultDto<TItem> {
+  items: TItem[]
+  pagination: {
+    limit: number
+    returned: number
+  }
+}
+
+interface BackendCommandAckDto {
+  agentId: string
+  userId: string
+  correlationId: string
+  status: string
+  acceptedAt: string
+}
+
+interface BackendBroadcastCommandItemDto {
+  agentId: string
+  status: string
+  correlationId?: string
+  reason?: string
+}
+
+interface BackendBroadcastCommandAckDto {
+  userId: string
+  acceptedAt: string
+  acceptedCount: number
+  rejectedCount: number
+  items: BackendBroadcastCommandItemDto[]
+}
+
+const BACKEND_API_BASE = "/api/backend"
+const DEFAULT_USER_ID = "demo-user"
+
+function getUserId(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_USER_ID?.trim()
+  return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_USER_ID
+}
+
+async function backendRequest<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
+  const headers = new Headers(init?.headers)
+  headers.set("Accept", "application/json")
+  headers.set("X-User-Id", getUserId())
+  if (init?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
+
+  const timeoutController = new AbortController()
+  const timeoutId = setTimeout(() => timeoutController.abort(), Math.max(1000, timeoutMs))
+
+  let response: Response
+  try {
+    response = await fetch(`${BACKEND_API_BASE}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+      signal: timeoutController.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Backend request timed out after ${timeoutMs}ms`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
+
+  if (!response.ok) {
+    throw new Error(`Backend request failed: ${response.status} ${response.statusText}`)
+  }
+
+  return (await response.json()) as T
+}
+
+function toMood(status: string, energyRaw: number, emotionRaw?: string): Mood {
+  const statusLower = status.toLowerCase()
+  const emotion = emotionRaw?.trim().toLowerCase() ?? ""
+  const energy = Number.isFinite(energyRaw) ? Math.max(0, Math.min(1, energyRaw)) : 0.5
+
+  if (emotion.includes("радост") || emotion.includes("счаст") || emotion.includes("вдохнов") || emotion.includes("воодуш")) return "happy"
+  if (emotion.includes("спокой") || emotion.includes("нейтрал")) return "neutral"
+  if (emotion.includes("устал") || emotion.includes("груст")) return "sad"
+  if (emotion.includes("раздраж") || emotion.includes("зл")) return "angry"
+  if (emotion.includes("тревог") || emotion.includes("напряж")) return "anxious"
+
+  if (statusLower.includes("error") || statusLower.includes("failed")) return "angry"
+  if (statusLower.includes("stop") || statusLower.includes("archived")) return "sad"
+  if (statusLower.includes("pause")) return "anxious"
+  if (energy >= 0.8) return "excited"
+  if (energy >= 0.6) return "happy"
+  if (energy >= 0.4) return "neutral"
+  if (energy >= 0.2) return "anxious"
+  return "sad"
+}
+
+function toTraits(traits?: BackendPersonalityTraits, explicitTraits?: string[]): string[] {
+  if (explicitTraits && explicitTraits.length > 0) {
+    return explicitTraits.slice(0, 8)
+  }
+
+  if (!traits) return ["adaptive"]
+
+  const labels: Array<{ key: keyof BackendPersonalityTraits; label: string }> = [
+    { key: "openness", label: "curious" },
+    { key: "conscientiousness", label: "disciplined" },
+    { key: "extraversion", label: "social" },
+    { key: "agreeableness", label: "cooperative" },
+    { key: "neuroticism", label: "sensitive" },
+  ]
+
+  const sorted = labels
+    .map((item) => ({ label: item.label, value: Number(traits[item.key] ?? 0) }))
+    .sort((a, b) => b.value - a.value)
+    .filter((item) => item.value > 0)
+    .slice(0, 3)
+    .map((item) => item.label)
+
+  return sorted.length > 0 ? sorted : ["adaptive"]
+}
+
+function mapBackendAgent(agent: BackendAgentDto): Agent {
+  const mood = toMood(agent.status, agent.energy, agent.emotion)
+  const traits = toTraits(agent.personalityTraits, agent.traits)
+  const memories =
+    agent.memories && agent.memories.length > 0
+      ? agent.memories
+      : agent.state
+        ? [`Current state: ${agent.state}`]
+        : []
+  return {
+    id: agent.agentId,
+    name: agent.name,
+    avatar: agent.name?.trim()?.charAt(0)?.toUpperCase() || "?",
+    mood,
+    traits,
+    description: agent.description?.trim() || `${agent.model} - status: ${agent.status}`,
+    currentPlan: agent.currentPlan?.trim() || agent.state || "No current plan",
+    memories,
+  }
+}
+
+function asRecord(input: unknown): Record<string, unknown> | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null
+  return input as Record<string, unknown>
+}
+
+function readString(record: Record<string, unknown> | null, keys: string[]): string | undefined {
+  if (!record) return undefined
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim().length > 0) return value.trim()
+  }
+  return undefined
+}
+
+function normalizeEventType(rawType: string): AgentEvent["type"] {
+  const t = rawType.toLowerCase()
+  if (t.includes("chat") || t.includes("message")) return "chat"
+  if (t.includes("emotion") || t.includes("mood")) return "emotion"
+  if (t.includes("system") || t.includes("status") || t.includes("error") || t.includes("progress")) return "system"
+  return "action"
+}
+
+function payloadToText(payload: unknown, eventType: string): string {
+  const record = asRecord(payload)
+  const directText = readString(record, ["text", "message", "description", "content"])
+  if (directText) return directText
+  if (record) {
+    const nested = asRecord(record.payload)
+    const nestedText = readString(nested, ["text", "message", "description", "content"])
+    if (nestedText) return nestedText
+  }
+
+  try {
+    const json = JSON.stringify(payload)
+    if (!json || json === "{}") return eventType
+    return json.slice(0, 200)
+  } catch {
+    return eventType
+  }
+}
+
+function mapBackendEvent(event: BackendEventDto, agentsById: Map<string, Agent>): AgentEvent {
+  const record = asRecord(event.payload)
+  const nested = asRecord(record?.payload)
+  const source = nested ?? record
+
+  const agentId =
+    readString(source, ["agentId", "agent_id", "id"]) ??
+    readString(asRecord(source?.agent), ["id", "agentId"]) ??
+    "system"
+
+  const agentName =
+    readString(source, ["agentName", "agent_name", "name"]) ??
+    agentsById.get(agentId)?.name ??
+    "System"
+
+  return {
+    id: event.id,
+    agentId,
+    agentName,
+    type: normalizeEventType(event.type),
+    text: payloadToText(event.payload, event.type),
+    timestamp: event.createdAt,
+  }
+}
+
+function normalizeMessageRole(roleRaw: string): AgentMessageRole {
+  const role = roleRaw.trim().toLowerCase()
+  if (role === "user" || role === "assistant" || role === "system") {
+    return role
+  }
+
+  return "assistant"
+}
+
+function normalizeChatLine(line: string): string {
+  return line.trim().replace(/^\*+|\*+$/g, "").trim()
+}
+
+function isCommandLine(line: string): boolean {
+  const normalized = line.trim().toLowerCase()
+  if (!normalized || normalized.includes(" ")) {
+    return false
+  }
+
+  return (
+    normalized === "world.update" ||
+    normalized.startsWith("chat.") ||
+    normalized.startsWith("action.") ||
+    normalized.startsWith("custom.") ||
+    normalized.startsWith("ui.") ||
+    normalized.startsWith("system.")
+  )
+}
+
+function cleanupAssistantText(raw: string): string {
+  const cleaned = raw
+    .replace(/\*\*/g, " ")
+    .replace(/[«»]/g, "\"")
+    .replace(/^[\"']+|[\"']+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (!cleaned) {
+    return ""
+  }
+
+  return cleaned.length <= 400 ? cleaned : `${cleaned.slice(0, 397)}...`
+}
+
+function sanitizeConversationContent(rawContent: string, role: AgentMessageRole): string {
+  const raw = rawContent.trim()
+  if (!raw) {
+    return ""
+  }
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => normalizeChatLine(line))
+    .filter((line) => line.length > 0)
+  if (lines.length === 0) {
+    return ""
+  }
+
+  if (role === "assistant") {
+    const actionTextLine = lines.find((line) => line.toLowerCase().startsWith("actiontext"))
+    if (actionTextLine) {
+      const separator = actionTextLine.indexOf(":")
+      const extracted = separator >= 0 ? actionTextLine.slice(separator + 1).trim() : actionTextLine
+      return cleanupAssistantText(extracted)
+    }
+
+    const withoutActionMeta = lines.filter((line) => {
+      const lowered = line.toLowerCase()
+      return !lowered.startsWith("actionname") && !lowered.startsWith("actiontext")
+    })
+
+    return cleanupAssistantText(withoutActionMeta.join(" "))
+  }
+
+  if (lines.length > 1 && isCommandLine(lines[0])) {
+    return lines.slice(1).join("\n")
+  }
+
+  return lines.join("\n")
+}
+
+function mapBackendMessage(
+  message: BackendAgentMessageDto,
+  agentsById: Map<string, Agent>
+): AgentConversationMessage {
+  const role = normalizeMessageRole(message.role)
+  return {
+    id: message.messageId,
+    agentId: message.agentId,
+    agentName: agentsById.get(message.agentId)?.name ?? "Agent",
+    role,
+    content: sanitizeConversationContent(message.content, role),
+    timestamp: message.createdAt,
+    correlationId: message.correlationId,
+  }
+}
+
+function buildRelationshipsFromEvents(events: AgentEvent[], agents: Agent[]): Relationship[] {
+  const existingIds = new Set(agents.map((a) => a.id))
+  const relCounts = new Map<string, number>()
+
+  for (let i = 1; i < events.length; i += 1) {
+    const previous = events[i - 1]
+    const current = events[i]
+    if (
+      previous.agentId === current.agentId ||
+      previous.agentId === "system" ||
+      current.agentId === "system" ||
+      !existingIds.has(previous.agentId) ||
+      !existingIds.has(current.agentId)
+    ) {
+      continue
+    }
+
+    const key = `${previous.agentId}|${current.agentId}`
+    relCounts.set(key, (relCounts.get(key) ?? 0) + 1)
+  }
+
+  return Array.from(relCounts.entries())
+    .map(([key, count]) => {
+      const [from, to] = key.split("|")
+      return {
+        from,
+        to,
+        sentiment: Math.min(0.8, count / 5),
+        label: "interaction",
+      } satisfies Relationship
+    })
+    .slice(0, 80)
+}
+
+function buildStats(agents: Agent[], events: AgentEvent[], relationships: Relationship[]): WorldStats {
+  const moodWeight: Record<Mood, number> = {
+    happy: 0.8,
+    neutral: 0.5,
+    sad: 0.2,
+    angry: 0.15,
+    excited: 0.9,
+    anxious: 0.35,
+  }
+
+  const eventTypeOrder: AgentEvent["type"][] = ["chat", "action", "emotion", "system"]
+  const eventsByType = eventTypeOrder.map((type) => ({
+    type,
+    count: events.filter((e) => e.type === type).length,
+  }))
+
+  const moodDistribution = (Object.keys(MOOD_CONFIG) as Mood[]).map((mood) => ({
+    mood,
+    count: agents.filter((a) => a.mood === mood).length,
+  }))
+
+  const avgMood =
+    agents.length === 0
+      ? 0
+      : agents.reduce((sum, agent) => sum + moodWeight[agent.mood], 0) / agents.length
+
+  const activity = new Map<string, number>()
+  for (const event of events) {
+    if (event.agentId !== "system") {
+      activity.set(event.agentId, (activity.get(event.agentId) ?? 0) + 1)
+    }
+  }
+
+  const mostActiveAgentId =
+    Array.from(activity.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? agents[0]?.id ?? "-"
+  const mostActiveAgent = agents.find((a) => a.id === mostActiveAgentId)?.name ?? mostActiveAgentId
+
+  const topRelationshipRaw = relationships
+    .slice()
+    .sort((a, b) => Math.abs(b.sentiment) - Math.abs(a.sentiment))[0]
+
+  const topRelationship = topRelationshipRaw
+    ? {
+        from: agents.find((a) => a.id === topRelationshipRaw.from)?.name ?? topRelationshipRaw.from,
+        to: agents.find((a) => a.id === topRelationshipRaw.to)?.name ?? topRelationshipRaw.to,
+        sentiment: topRelationshipRaw.sentiment,
+      }
+    : { from: "-", to: "-", sentiment: 0 }
+
+  return {
+    totalEvents: events.length,
+    totalConversations: eventsByType.find((x) => x.type === "chat")?.count ?? 0,
+    avgMood,
+    mostActiveAgent,
+    topRelationship,
+    eventsByType,
+    moodDistribution,
+  }
+}
+
+function normalizeMood(rawMood: string): Mood {
+  const mood = rawMood.trim().toLowerCase()
+  if (mood === "happy" || mood === "neutral" || mood === "sad" || mood === "angry" || mood === "excited" || mood === "anxious") {
+    return mood
+  }
+
+  return "neutral"
+}
+
+function mapBackendStats(stats: BackendWorldStatsDto): WorldStats {
+  return {
+    totalEvents: stats.totalEvents,
+    totalConversations: stats.totalConversations,
+    avgMood: stats.avgMood,
+    mostActiveAgent: stats.mostActiveAgent,
+    topRelationship: stats.topRelationship,
+    eventsByType: stats.eventsByType,
+    moodDistribution: stats.moodDistribution.map((item) => ({
+      mood: normalizeMood(item.mood),
+      count: item.count,
+    })),
+  }
+}
+
+export interface WorldTime {
+  gameTime: string
+  speed: number
+}
+
+export async function addEvent(text: string): Promise<boolean> {
+  const payload = {
+    type: "ui.note",
+    payload: {
+      text,
+      message: text,
+      source: "frontend",
+      agentName: "Operator",
+    },
+  }
+
+  try {
+    await backendRequest<unknown>("/api/events", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+    return true
+  } catch (error) {
+    console.warn("[data] addEvent fallback, backend unavailable", error)
+    return false
+  }
+}
+
+function getMockAgentName(agentId: string): string {
+  return MOCK_AGENTS.find((agent) => agent.id === agentId)?.name ?? agentId
+}
+
+function getMockAgentMessages(agentId: string, limit: number): AgentConversationMessage[] {
+  const source = MOCK_AGENT_MESSAGES.get(agentId) ?? []
+  return source.slice(-limit)
+}
+
+function getAllMockAgentMessages(limitPerAgent: number): AgentConversationMessage[] {
+  const combined = Array.from(MOCK_AGENT_MESSAGES.values())
+    .flatMap((messages) => messages.slice(-limitPerAgent))
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+  return combined
+}
+
+function pushMockConversationMessage(agentId: string, role: AgentMessageRole, content: string, correlationId: string): void {
+  const target = MOCK_AGENT_MESSAGES.get(agentId) ?? []
+  target.push({
+    id: `mock-msg-${Math.random().toString(36).slice(2, 10)}`,
+    agentId,
+    agentName: getMockAgentName(agentId),
+    role,
+    content,
+    timestamp: new Date().toISOString(),
+    correlationId,
+  })
+  MOCK_AGENT_MESSAGES.set(agentId, target)
+}
+
+export async function getAgentMessages(agentId: string, limit = 80): Promise<AgentConversationMessage[]> {
+  const trimmedId = agentId.trim()
+  if (!trimmedId) {
+    return []
+  }
+
+  try {
+    const [paged, agents] = await Promise.all([
+      backendRequest<BackendPagedResultDto<BackendAgentMessageDto>>(
+        `/api/user-agents/${encodeURIComponent(trimmedId)}/messages?limit=${Math.max(1, Math.floor(limit))}`
+      ),
+      getAgents(),
+    ])
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+    return paged.items
+      .map((message) => mapBackendMessage(message, agentsById))
+      .filter((message) => message.content.trim().length > 0)
+  } catch (error) {
+    console.warn("[data] getAgentMessages fallback to mock", error)
+    return getMockAgentMessages(trimmedId, Math.max(1, Math.floor(limit)))
+  }
+}
+
+export async function getAllAgentMessages(limitPerAgent = 20): Promise<AgentConversationMessage[]> {
+  const safeLimit = Math.max(1, Math.floor(limitPerAgent))
+  try {
+    const [paged, agents] = await Promise.all([
+      backendRequest<BackendPagedResultDto<BackendAgentMessageDto>>(
+        `/api/user-agents/messages?limitPerAgent=${safeLimit}`
+      ),
+      getAgents(),
+    ])
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+    return paged.items
+      .map((message) => mapBackendMessage(message, agentsById))
+      .filter((message) => message.content.trim().length > 0)
+  } catch (error) {
+    console.warn("[data] getAllAgentMessages fallback to mock", error)
+    return getAllMockAgentMessages(safeLimit)
+  }
+}
+
+export async function commandAgent(
+  agentId: string,
+  message: string,
+  command?: string
+): Promise<CommandAck | null> {
+  const trimmedAgentId = agentId.trim()
+  const trimmedMessage = message.trim()
+  const trimmedCommand = command?.trim()
+
+  if (!trimmedAgentId || (!trimmedMessage && !trimmedCommand)) {
+    return null
+  }
+
+  const payload = {
+    command: trimmedCommand || undefined,
+    message: trimmedMessage || undefined,
+  }
+
+  try {
+    const accepted = await backendRequest<BackendCommandAckDto>(
+      `/api/user-agents/${encodeURIComponent(trimmedAgentId)}/commands`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    )
+
+    return {
+      agentId: accepted.agentId,
+      userId: accepted.userId,
+      correlationId: accepted.correlationId,
+      status: accepted.status,
+      acceptedAt: accepted.acceptedAt,
+    }
+  } catch (error) {
+    console.warn("[data] commandAgent fallback to mock", error)
+    const correlationId = `mock-${Date.now().toString(36)}`
+    const userText = trimmedMessage || trimmedCommand || "..."
+    pushMockConversationMessage(trimmedAgentId, "user", userText, correlationId)
+    pushMockConversationMessage(
+      trimmedAgentId,
+      "assistant",
+      `${getMockAgentName(trimmedAgentId)} получил команду и готов действовать.`,
+      correlationId
+    )
+    return {
+      agentId: trimmedAgentId,
+      userId: getUserId(),
+      correlationId,
+      status: "Working",
+      acceptedAt: new Date().toISOString(),
+    }
+  }
+}
+
+export async function broadcastAgentCommand(
+  message: string,
+  options?: { command?: string; agentIds?: string[] }
+): Promise<BroadcastCommandAck | null> {
+  const trimmedMessage = message.trim()
+  const trimmedCommand = options?.command?.trim()
+  if (!trimmedMessage && !trimmedCommand) {
+    return null
+  }
+
+  const payload = {
+    command: trimmedCommand || undefined,
+    message: trimmedMessage || undefined,
+    agentIds: options?.agentIds && options.agentIds.length > 0 ? options.agentIds : undefined,
+  }
+
+  try {
+    const accepted = await backendRequest<BackendBroadcastCommandAckDto>(
+      "/api/user-agents/commands/broadcast",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    )
+
+    return {
+      userId: accepted.userId,
+      acceptedAt: accepted.acceptedAt,
+      acceptedCount: accepted.acceptedCount,
+      rejectedCount: accepted.rejectedCount,
+      items: accepted.items.map((item) => ({
+        agentId: item.agentId,
+        status: item.status,
+        correlationId: item.correlationId,
+        reason: item.reason,
+      })),
+    }
+  } catch (error) {
+    console.warn("[data] broadcastAgentCommand fallback to mock", error)
+    const targetAgentIds = options?.agentIds?.filter((id) => id.trim().length > 0) ?? MOCK_AGENTS.map((agent) => agent.id)
+    const correlationBase = `mock-${Date.now().toString(36)}`
+    const items = targetAgentIds.map((agentId, index) => {
+      const correlationId = `${correlationBase}-${index + 1}`
+      const userText = trimmedMessage || trimmedCommand || "..."
+      pushMockConversationMessage(agentId, "user", userText, correlationId)
+      pushMockConversationMessage(
+        agentId,
+        "assistant",
+        `${getMockAgentName(agentId)} получил общий сигнал и приступает к задаче.`,
+        correlationId
+      )
+      return {
+        agentId,
+        status: "accepted",
+        correlationId,
+      } satisfies BroadcastCommandItem
+    })
+
+    return {
+      userId: getUserId(),
+      acceptedAt: new Date().toISOString(),
+      acceptedCount: items.length,
+      rejectedCount: 0,
+      items,
+    }
+  }
+}
+
+export async function generateAgentWithAi(prompt: string, model?: string): Promise<Agent | null> {
+  const trimmedPrompt = prompt.trim()
+  if (!trimmedPrompt) {
+    return null
+  }
+
+  const payload = {
+    prompt: trimmedPrompt,
+    model: model?.trim() || undefined,
+  }
+
+  try {
+    const created = await backendRequest<BackendAgentDto>("/api/user-agents/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, 90000)
+
+    return mapBackendAgent(created)
+  } catch (error) {
+    console.warn("[data] generateAgentWithAi failed", error)
+    return null
+  }
+}
+
+export async function deleteAgent(id: string): Promise<boolean> {
+  const trimmedId = id.trim()
+  if (!trimmedId) {
+    return false
+  }
+
+  try {
+    await backendRequest<unknown>(`/api/user-agents/${encodeURIComponent(trimmedId)}`, {
+      method: "DELETE",
+    })
+    return true
+  } catch (error) {
+    console.warn("[data] deleteAgent failed", error)
+    return false
+  }
+}
+
+export async function getAgents(): Promise<Agent[]> {
+  try {
+    const agents = await backendRequest<BackendAgentDto[]>("/api/user-agents")
+    return agents.map(mapBackendAgent)
+  } catch (error) {
+    console.warn("[data] getAgents fallback to mock", error)
+    return MOCK_AGENTS
+  }
+}
+
+export async function getAgent(id: string): Promise<Agent | undefined> {
+  try {
+    const agent = await backendRequest<BackendAgentDto>(`/api/user-agents/${encodeURIComponent(id)}`)
+    return mapBackendAgent(agent)
+  } catch {
+    return MOCK_AGENTS.find((a) => a.id === id)
+  }
+}
+
+export async function getEvents(): Promise<AgentEvent[]> {
+  try {
+    const [agents, events] = await Promise.all([
+      getAgents(),
+      backendRequest<BackendEventDto[]>("/api/events"),
+    ])
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
+    return events.map((event) => mapBackendEvent(event, agentsById))
+  } catch (error) {
+    console.warn("[data] getEvents fallback to mock", error)
+    return MOCK_EVENTS
+  }
+}
+
+export async function getRelationships(): Promise<Relationship[]> {
+  try {
+    const relationships = await backendRequest<BackendRelationshipDto[]>("/api/relationships")
+    return relationships.map((relationship) => ({
+      from: relationship.from,
+      to: relationship.to,
+      sentiment: relationship.sentiment,
+      label: relationship.label ?? "interaction",
+    }))
+  } catch (error) {
+    console.warn("[data] getRelationships fallback to mock", error)
+    return MOCK_RELATIONSHIPS
+  }
+}
+
+export async function getStats(): Promise<WorldStats> {
+  try {
+    const stats = await backendRequest<BackendWorldStatsDto>("/api/stats")
+    return mapBackendStats(stats)
+  } catch (error) {
+    console.warn("[data] getStats fallback to mock", error)
+    return MOCK_STATS
+  }
+}
+
+export async function getWorldTime(): Promise<WorldTime | null> {
+  try {
+    const worldTime = await backendRequest<BackendWorldTimeDto>("/api/world/time")
+    return {
+      gameTime: worldTime.gameTime,
+      speed: worldTime.speed,
+    }
+  } catch (error) {
+    console.warn("[data] getWorldTime failed", error)
+    return null
+  }
+}
+
+export async function setWorldTimeSpeed(speed: number): Promise<WorldTime | null> {
+  try {
+    const updated = await backendRequest<BackendWorldTimeDto>("/api/world/time/speed", {
+      method: "POST",
+      body: JSON.stringify({ speed }),
+    })
+    return {
+      gameTime: updated.gameTime,
+      speed: updated.speed,
+    }
+  } catch (error) {
+    console.warn("[data] setWorldTimeSpeed failed", error)
+    return null
+  }
+}
+
+export async function advanceWorldTime(minutes: number): Promise<WorldTime | null> {
+  try {
+    const updated = await backendRequest<BackendWorldTimeDto>("/api/world/time/advance", {
+      method: "POST",
+      body: JSON.stringify({ minutes }),
+    })
+    return {
+      gameTime: updated.gameTime,
+      speed: updated.speed,
+    }
+  } catch (error) {
+    console.warn("[data] advanceWorldTime failed", error)
+    return null
+  }
+}
+
+export async function resetWorldSimulation(): Promise<WorldTime | null> {
+  try {
+    const updated = await backendRequest<BackendWorldTimeDto>("/api/world/time/reset", {
+      method: "POST",
+    })
+    return {
+      gameTime: updated.gameTime,
+      speed: updated.speed,
+    }
+  } catch (error) {
+    console.warn("[data] resetWorldSimulation failed", error)
+    return null
+  }
+}
+
+
+

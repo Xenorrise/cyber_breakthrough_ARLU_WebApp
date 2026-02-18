@@ -1,0 +1,81 @@
+@LongLifeModels_HostAddress = http://localhost:5133
+
+GET {{LongLifeModels_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+GET {{LongLifeModels_HostAddress}}/api/user-agents
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+POST {{LongLifeModels_HostAddress}}/api/user-agents
+X-User-Id: demo-user
+Content-Type: application/json
+
+{
+  "name": "Researcher",
+  "model": "openai/gpt-oss-20b",
+  "initialState": "Ready",
+  "initialEnergy": 0.8
+}
+
+###
+
+POST {{LongLifeModels_HostAddress}}/api/user-agents/generate
+X-User-Id: demo-user
+Content-Type: application/json
+
+{
+  "prompt": "Создай исследовательского агента для анализа мировых событий. Характер: любопытный, спокойный, системный.",
+  "model": "openai/gpt-oss-20b"
+}
+
+###
+
+GET {{LongLifeModels_HostAddress}}/api/agents
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+GET {{LongLifeModels_HostAddress}}/api/relationships
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+GET {{LongLifeModels_HostAddress}}/api/stats
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+GET {{LongLifeModels_HostAddress}}/api/world/time
+X-User-Id: demo-user
+Accept: application/json
+
+###
+
+POST {{LongLifeModels_HostAddress}}/api/world/time/speed
+X-User-Id: demo-user
+Content-Type: application/json
+
+{
+  "speed": 2.0
+}
+
+###
+
+POST {{LongLifeModels_HostAddress}}/api/world/time/advance
+X-User-Id: demo-user
+Content-Type: application/json
+
+{
+  "minutes": 180
+}
+
+###
+

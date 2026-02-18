@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/node_modules/
+.env
+.env.local
+appsettings.Development.json
+src/backend/LongLifeModels/appsettings.Local.json
