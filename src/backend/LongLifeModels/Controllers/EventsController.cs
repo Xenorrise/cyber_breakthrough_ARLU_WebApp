@@ -29,11 +29,11 @@ public sealed class EventsController(
         var userId = TryResolveUserId(out var resolvedUserId) ? resolvedUserId : null;
         var created = await eventService.CreateAsync(request, userId, createdAt: null, cancellationToken);
 
-        if (IsWorldEvent(request.Type) &&
+        if (ShouldFanOutEvent(request.Type) &&
             !string.IsNullOrWhiteSpace(userId))
         {
-            var worldMessage = ExtractWorldMessage(request) ?? $"World event: {request.Type}";
-            await FanOutWorldEventAsync(userId!, worldMessage, created.Id, cancellationToken);
+            var worldMessage = ExtractWorldMessage(request) ?? $"Event: {request.Type}";
+            await FanOutEventAsync(userId!, worldMessage, created.Id, cancellationToken);
         }
 
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
@@ -75,7 +75,7 @@ public sealed class EventsController(
         return Ok(found);
     }
 
-    private async Task FanOutWorldEventAsync(
+    private async Task FanOutEventAsync(
         string userId,
         string worldMessage,
         Guid eventId,
@@ -100,14 +100,14 @@ public sealed class EventsController(
             catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
             {
                 logger.LogWarning(
-                    "World event fan-out skipped for agent {AgentId}: {Reason}",
+                    "Event fan-out skipped for agent {AgentId}: {Reason}",
                     agent.AgentId,
                     ex.Message);
             }
         }
     }
 
-    private static bool IsWorldEvent(string type)
+    private static bool ShouldFanOutEvent(string type)
     {
         if (string.IsNullOrWhiteSpace(type))
         {
@@ -115,9 +115,15 @@ public sealed class EventsController(
         }
 
         var lowered = type.Trim().ToLowerInvariant();
+        if (lowered.StartsWith("agent.", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         return lowered.Contains("world") ||
                lowered.Contains("environment") ||
-               lowered is "ui.note" or "ui.world";
+               lowered.StartsWith("custom.", StringComparison.Ordinal) ||
+               lowered is "ui.note" or "ui.world" or "ui.custom";
     }
 
     private static string? ExtractWorldMessage(CreateEventRequestDto request)
@@ -143,7 +149,7 @@ public sealed class EventsController(
             return nestedValue;
         }
 
-        return null;
+        return BuildPayloadFallbackMessage(request.Payload);
     }
 
     private bool TryResolveUserId(out string? userId)
@@ -215,5 +221,17 @@ public sealed class EventsController(
 
         value = null;
         return false;
+    }
+
+    private static string? BuildPayloadFallbackMessage(JsonElement payload)
+    {
+        var raw = payload.GetRawText()?.Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        const int maxLength = 320;
+        return raw.Length <= maxLength ? raw : $"{raw[..(maxLength - 3)]}...";
     }
 }

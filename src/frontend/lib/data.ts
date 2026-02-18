@@ -475,7 +475,7 @@ function getUserId(): string {
   return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_USER_ID
 }
 
-async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
+async function backendRequest<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
   const headers = new Headers(init?.headers)
   headers.set("Accept", "application/json")
   headers.set("X-User-Id", getUserId())
@@ -483,11 +483,25 @@ async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set("Content-Type", "application/json")
   }
 
-  const response = await fetch(`${BACKEND_API_BASE}${path}`, {
-    ...init,
-    headers,
-    cache: "no-store",
-  })
+  const timeoutController = new AbortController()
+  const timeoutId = setTimeout(() => timeoutController.abort(), Math.max(1000, timeoutMs))
+
+  let response: Response
+  try {
+    response = await fetch(`${BACKEND_API_BASE}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+      signal: timeoutController.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Backend request timed out after ${timeoutMs}ms`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   if (!response.ok) {
     throw new Error(`Backend request failed: ${response.status} ${response.statusText}`)
@@ -638,16 +652,88 @@ function normalizeMessageRole(roleRaw: string): AgentMessageRole {
   return "assistant"
 }
 
+function normalizeChatLine(line: string): string {
+  return line.trim().replace(/^\*+|\*+$/g, "").trim()
+}
+
+function isCommandLine(line: string): boolean {
+  const normalized = line.trim().toLowerCase()
+  if (!normalized || normalized.includes(" ")) {
+    return false
+  }
+
+  return (
+    normalized === "world.update" ||
+    normalized.startsWith("chat.") ||
+    normalized.startsWith("action.") ||
+    normalized.startsWith("custom.") ||
+    normalized.startsWith("ui.") ||
+    normalized.startsWith("system.")
+  )
+}
+
+function cleanupAssistantText(raw: string): string {
+  const cleaned = raw
+    .replace(/\*\*/g, " ")
+    .replace(/[«»]/g, "\"")
+    .replace(/^[\"']+|[\"']+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (!cleaned) {
+    return ""
+  }
+
+  return cleaned.length <= 400 ? cleaned : `${cleaned.slice(0, 397)}...`
+}
+
+function sanitizeConversationContent(rawContent: string, role: AgentMessageRole): string {
+  const raw = rawContent.trim()
+  if (!raw) {
+    return ""
+  }
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => normalizeChatLine(line))
+    .filter((line) => line.length > 0)
+  if (lines.length === 0) {
+    return ""
+  }
+
+  if (role === "assistant") {
+    const actionTextLine = lines.find((line) => line.toLowerCase().startsWith("actiontext"))
+    if (actionTextLine) {
+      const separator = actionTextLine.indexOf(":")
+      const extracted = separator >= 0 ? actionTextLine.slice(separator + 1).trim() : actionTextLine
+      return cleanupAssistantText(extracted)
+    }
+
+    const withoutActionMeta = lines.filter((line) => {
+      const lowered = line.toLowerCase()
+      return !lowered.startsWith("actionname") && !lowered.startsWith("actiontext")
+    })
+
+    return cleanupAssistantText(withoutActionMeta.join(" "))
+  }
+
+  if (lines.length > 1 && isCommandLine(lines[0])) {
+    return lines.slice(1).join("\n")
+  }
+
+  return lines.join("\n")
+}
+
 function mapBackendMessage(
   message: BackendAgentMessageDto,
   agentsById: Map<string, Agent>
 ): AgentConversationMessage {
+  const role = normalizeMessageRole(message.role)
   return {
     id: message.messageId,
     agentId: message.agentId,
     agentName: agentsById.get(message.agentId)?.name ?? "Agent",
-    role: normalizeMessageRole(message.role),
-    content: message.content,
+    role,
+    content: sanitizeConversationContent(message.content, role),
     timestamp: message.createdAt,
     correlationId: message.correlationId,
   }
@@ -843,7 +929,9 @@ export async function getAgentMessages(agentId: string, limit = 80): Promise<Age
       getAgents(),
     ])
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
-    return paged.items.map((message) => mapBackendMessage(message, agentsById))
+    return paged.items
+      .map((message) => mapBackendMessage(message, agentsById))
+      .filter((message) => message.content.trim().length > 0)
   } catch (error) {
     console.warn("[data] getAgentMessages fallback to mock", error)
     return getMockAgentMessages(trimmedId, Math.max(1, Math.floor(limit)))
@@ -860,7 +948,9 @@ export async function getAllAgentMessages(limitPerAgent = 20): Promise<AgentConv
       getAgents(),
     ])
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]))
-    return paged.items.map((message) => mapBackendMessage(message, agentsById))
+    return paged.items
+      .map((message) => mapBackendMessage(message, agentsById))
+      .filter((message) => message.content.trim().length > 0)
   } catch (error) {
     console.warn("[data] getAllAgentMessages fallback to mock", error)
     return getAllMockAgentMessages(safeLimit)
@@ -904,7 +994,7 @@ export async function commandAgent(
   } catch (error) {
     console.warn("[data] commandAgent fallback to mock", error)
     const correlationId = `mock-${Date.now().toString(36)}`
-    const userText = [trimmedCommand, trimmedMessage].filter(Boolean).join("\n")
+    const userText = trimmedMessage || trimmedCommand || "..."
     pushMockConversationMessage(trimmedAgentId, "user", userText, correlationId)
     pushMockConversationMessage(
       trimmedAgentId,
@@ -965,7 +1055,7 @@ export async function broadcastAgentCommand(
     const correlationBase = `mock-${Date.now().toString(36)}`
     const items = targetAgentIds.map((agentId, index) => {
       const correlationId = `${correlationBase}-${index + 1}`
-      const userText = [trimmedCommand, trimmedMessage].filter(Boolean).join("\n")
+      const userText = trimmedMessage || trimmedCommand || "..."
       pushMockConversationMessage(agentId, "user", userText, correlationId)
       pushMockConversationMessage(
         agentId,
@@ -1005,7 +1095,7 @@ export async function generateAgentWithAi(prompt: string, model?: string): Promi
     const created = await backendRequest<BackendAgentDto>("/api/user-agents/generate", {
       method: "POST",
       body: JSON.stringify(payload),
-    })
+    }, 90000)
 
     return mapBackendAgent(created)
   } catch (error) {

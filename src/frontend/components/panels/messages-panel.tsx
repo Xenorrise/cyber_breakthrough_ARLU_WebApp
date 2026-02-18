@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   HubConnectionBuilder,
   LogLevel,
@@ -71,6 +71,8 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastAck, setLastAck] = useState<string | null>(null)
+  const loadRequestIdRef = useRef(0)
+  const selectedTargetRef = useRef(selectedTarget)
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedTarget),
@@ -78,28 +80,36 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
   )
 
   useEffect(() => {
+    selectedTargetRef.current = selectedTarget
+  }, [selectedTarget])
+
+  useEffect(() => {
     let active = true
     let connection: HubConnection | null = null
 
     const loadData = async ({ silent = false }: { silent?: boolean } = {}) => {
+      const requestId = ++loadRequestIdRef.current
       if (!silent) {
         setLoading(true)
+        setMessages([])
       }
 
       try {
         const loadedAgents = await getAgents()
-        if (!active) {
+        if (!active || requestId !== loadRequestIdRef.current) {
           return
         }
 
         setAgents(loadedAgents)
 
+        const activeTarget = selectedTargetRef.current
         const nextTarget =
-          selectedTarget === ALL_AGENTS_TARGET || loadedAgents.some((agent) => agent.id === selectedTarget)
-            ? selectedTarget
+          activeTarget === ALL_AGENTS_TARGET || loadedAgents.some((agent) => agent.id === activeTarget)
+            ? activeTarget
             : (loadedAgents[0]?.id ?? ALL_AGENTS_TARGET)
 
-        if (nextTarget !== selectedTarget) {
+        if (nextTarget !== activeTarget) {
+          selectedTargetRef.current = nextTarget
           setSelectedTarget(nextTarget)
         }
 
@@ -108,12 +118,13 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
             ? await getAllAgentMessages(20)
             : await getAgentMessages(nextTarget, 120)
 
-        if (!active) {
+        if (!active || requestId !== loadRequestIdRef.current) {
           return
         }
 
         setMessages(
           loadedMessages
+            .filter((message) => message.role !== "system")
             .slice()
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
         )
@@ -189,7 +200,43 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
 
       void connection.stop()
     }
-  }, [refreshToken, selectedTarget])
+  }, [refreshToken])
+
+  useEffect(() => {
+    let active = true
+    const requestId = ++loadRequestIdRef.current
+    setLoading(true)
+    setMessages([])
+
+    const loadMessagesForTarget = async () => {
+      try {
+        const loadedMessages =
+          selectedTarget === ALL_AGENTS_TARGET
+            ? await getAllAgentMessages(20)
+            : await getAgentMessages(selectedTarget, 120)
+
+        if (!active || requestId !== loadRequestIdRef.current) {
+          return
+        }
+
+        setMessages(
+          loadedMessages
+            .filter((message) => message.role !== "system")
+            .slice()
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+        )
+      } finally {
+        if (active && requestId === loadRequestIdRef.current) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadMessagesForTarget()
+    return () => {
+      active = false
+    }
+  }, [selectedTarget])
 
   const handleSend = async () => {
     const text = draft.trim()
@@ -202,46 +249,44 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
     setLastAck(null)
 
     const command = messageMode === "ask" ? "chat.ask" : "action.nudge"
+    const sendTarget = selectedTarget
+
+    if (sendTarget !== ALL_AGENTS_TARGET) {
+      const optimisticUserMessage: AgentConversationMessage = {
+        id: `local-user-${Date.now()}`,
+        agentId: sendTarget,
+        agentName: selectedAgent?.name ?? "You",
+        role: "user",
+        content: text,
+        timestamp: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, optimisticUserMessage])
+    }
 
     try {
-      if (selectedTarget === ALL_AGENTS_TARGET) {
+      if (sendTarget === ALL_AGENTS_TARGET) {
         const ack = await broadcastAgentCommand(text, { command })
         if (!ack) {
-          setError("Не удалось отправить сообщение всем агентам.")
+          setError("Failed to send message to all agents.")
           return
         }
 
-        const rejectedItems = ack.items.filter((item) => item.status.toLowerCase() !== "accepted")
-        if (rejectedItems.length > 0) {
-          setLastAck(`Отправлено: ${ack.acceptedCount}, отклонено: ${ack.rejectedCount}.`)
+        if (ack.rejectedCount > 0) {
+          setLastAck(`Sent: ${ack.acceptedCount}, rejected: ${ack.rejectedCount}.`)
         } else {
-          setLastAck(`Отправлено всем агентам: ${ack.acceptedCount}.`)
+          setLastAck(`Sent to all agents: ${ack.acceptedCount}.`)
         }
       } else {
-        const ack = await commandAgent(selectedTarget, text, command)
+        const ack = await commandAgent(sendTarget, text, command)
         if (!ack) {
-          setError("Не удалось отправить сообщение выбранному агенту.")
+          setError("Failed to send message to selected agent.")
           return
         }
 
-        setLastAck("Сообщение отправлено, агент обрабатывает команду.")
+        setLastAck("Message queued. Agent is processing it.")
       }
 
       setDraft("")
-
-      const [freshAgents, freshMessages] = await Promise.all([
-        getAgents(),
-        selectedTarget === ALL_AGENTS_TARGET
-          ? getAllAgentMessages(20)
-          : getAgentMessages(selectedTarget, 120),
-      ])
-
-      setAgents(freshAgents)
-      setMessages(
-        freshMessages
-          .slice()
-          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      )
     } finally {
       setSending(false)
     }
@@ -363,7 +408,7 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
                     {message.content}
                   </div>
                   <div className="font-mono text-[10px] mt-1" style={{ color: "var(--muted-foreground)" }}>
-                    {message.role} • {formatMessageTime(message.timestamp)}
+                    {message.role} | {formatMessageTime(message.timestamp)}
                   </div>
                 </div>
               </div>
@@ -454,3 +499,5 @@ export function MessagesPanel({ refreshToken }: { refreshToken?: number }) {
     </div>
   )
 }
+
+

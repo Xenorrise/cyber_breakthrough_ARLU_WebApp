@@ -1,18 +1,18 @@
 using LongLifeModels.Data;
-using Microsoft.EntityFrameworkCore;
 using LongLifeModels.Domain;
+using Microsoft.EntityFrameworkCore;
+using System.Net;
 using System.Text.Json;
 
 namespace LongLifeModels.Services;
 
-// Файл: когнитивный цикл агента через LLM.
 public sealed class AgentBrain(
     AgentDbContext dbContext,
     ILLMService llmService,
     MemoryService memoryService,
-    MemoryCompressor memoryCompressor)
+    MemoryCompressor memoryCompressor,
+    ILogger<AgentBrain> logger)
 {
-    // Выполняет один цикл Reflection -> Goal -> Action.
     public async Task<AgentBrainResult> ThinkAsync(
         Guid agentId,
         string worldContext,
@@ -39,24 +39,59 @@ public sealed class AgentBrain(
             agent.Energy,
             JsonSerializer.Serialize(agent.PersonalityTraits));
 
-        var reflection = await llmService.GenerateAsync(
-            systemPrompt,
-            AgentPrompts.BuildReflectionPrompt(
-                JsonSerializer.Serialize(new { worldContext }),
-                JsonSerializer.Serialize(recentInteractions),
-                JsonSerializer.Serialize(recalledMemories)),
-            cancellationToken);
+        try
+        {
+            var reflection = await llmService.GenerateAsync(
+                systemPrompt,
+                AgentPrompts.BuildReflectionPrompt(
+                    JsonSerializer.Serialize(new { worldContext }),
+                    JsonSerializer.Serialize(recentInteractions),
+                    JsonSerializer.Serialize(recalledMemories)),
+                cancellationToken);
 
-        var goal = await llmService.GenerateAsync(systemPrompt, AgentPrompts.BuildGoalPrompt(reflection), cancellationToken);
+            var goal = await llmService.GenerateAsync(
+                systemPrompt,
+                AgentPrompts.BuildGoalPrompt(reflection),
+                cancellationToken);
 
-        var action = await llmService.GenerateAsync(systemPrompt, AgentPrompts.BuildActionPrompt(reflection, goal), cancellationToken);
+            var action = await llmService.GenerateAsync(
+                systemPrompt,
+                AgentPrompts.BuildActionPrompt(reflection, goal),
+                cancellationToken);
 
-        return new AgentBrainResult(reflection, goal, action);
+            return new AgentBrainResult(reflection, goal, action);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+        {
+            logger.LogWarning(
+                ex,
+                "LLM access denied for agent {AgentId}. Switching to fallback mode.",
+                agentId);
+
+            var summary = BuildFallbackSummary(worldContext);
+            return new AgentBrainResult(
+                Reflection: "LLM authorization failed. Fallback mode enabled.",
+                Goal: "Acknowledge the command and continue simulation without LLM.",
+                Action: $"ActionText: {agent.Name} принял задачу в fallback-режиме. Контекст: {summary}");
+        }
     }
 
-    // Оценивает размер контекста для триггера сжатия.
-    private static int EstimateTokens(string worldContext, IReadOnlyCollection<Interaction> interactions, IReadOnlyCollection<MemoryLog> memories)
+    private static int EstimateTokens(
+        string worldContext,
+        IReadOnlyCollection<Interaction> interactions,
+        IReadOnlyCollection<MemoryLog> memories)
         => (worldContext.Length / 4) + (interactions.Count * 120) + (memories.Count * 220);
+
+    private static string BuildFallbackSummary(string worldContext)
+    {
+        if (string.IsNullOrWhiteSpace(worldContext))
+        {
+            return "пустой контекст";
+        }
+
+        var compact = worldContext.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        return compact.Length <= 180 ? compact : $"{compact[..177]}...";
+    }
 }
 
 public sealed record AgentBrainResult(string Reflection, string Goal, string Action);

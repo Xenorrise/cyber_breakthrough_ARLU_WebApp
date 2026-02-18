@@ -35,6 +35,6 @@ public sealed class AgentCommandWorker(
             workItem.UserId,
             workItem.CorrelationId);
 
-        await tickProcessor.ProcessTickAsync(DateTime.UtcNow, cancellationToken);
+        await tickProcessor.ProcessCommandAsync(workItem, cancellationToken);
     }
 }

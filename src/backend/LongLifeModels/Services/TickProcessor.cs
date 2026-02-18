@@ -4,7 +4,9 @@ using LongLifeModels.DTOs;
 using LongLifeModels.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace LongLifeModels.Services;
 
@@ -39,10 +41,10 @@ public sealed class TickProcessor(
         using var semaphore = new SemaphoreSlim(Math.Max(1, _config.MaxParallelism));
         var tasks = candidateIds.Select(async agentId =>
         {
-            await semaphore.WaitAsync(ct);
+                await semaphore.WaitAsync(ct);
             try
             {
-                await ProcessAgentAsync(agentId, currentTickTime, ct);
+                await ProcessAgentAsync(agentId, currentTickTime, ct, workItem: null);
             }
             finally
             {
@@ -53,13 +55,17 @@ public sealed class TickProcessor(
         await Task.WhenAll(tasks);
     }
 
-    private async Task ProcessAgentAsync(Guid agentId, DateTime currentTickTime, CancellationToken ct)
+    public Task ProcessCommandAsync(AgentCommandWorkItem workItem, CancellationToken ct)
+        => ProcessAgentAsync(workItem.AgentId, DateTime.UtcNow, ct, workItem);
+
+    private async Task ProcessAgentAsync(Guid agentId, DateTime currentTickTime, CancellationToken ct, AgentCommandWorkItem? workItem)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
         var agentBrain = scope.ServiceProvider.GetRequiredService<AgentBrain>();
         var notifier = scope.ServiceProvider.GetRequiredService<IAgentRealtimeNotifier>();
         var eventService = scope.ServiceProvider.GetRequiredService<IEventService>();
+        var memoryService = scope.ServiceProvider.GetRequiredService<MemoryService>();
 
         var agent = await dbContext.Agents
             .FirstOrDefaultAsync(x => x.Id == agentId && !x.IsArchived, ct);
@@ -75,14 +81,17 @@ public sealed class TickProcessor(
             return;
         }
 
-        var lastUserMessage = await dbContext.AgentMessages
-            .Where(x => x.AgentId == agent.Id && x.UserId == agent.UserId && x.Role == "user")
+        var lastIncomingMessage = await dbContext.AgentMessages
+            .Where(x => x.AgentId == agent.Id && x.UserId == agent.UserId && x.Role != "assistant")
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
-        var correlationId = lastUserMessage?.CorrelationId;
+        var incomingRawMessage = workItem?.WorldContext ?? lastIncomingMessage?.Content;
+        var correlationId = string.IsNullOrWhiteSpace(workItem?.CorrelationId)
+            ? lastIncomingMessage?.CorrelationId
+            : workItem!.CorrelationId;
         var worldTime = await worldSimulationService.GetWorldTimeAsync(agent.UserId, ct);
-        var incomingCommand = ParseIncomingCommand(lastUserMessage?.Content);
+        var incomingCommand = ParseIncomingCommand(incomingRawMessage);
         var worldContext = BuildWorldContext(agent, incomingCommand, worldTime.GameTime);
 
         await notifier.NotifyAgentProgressAsync(
@@ -101,6 +110,7 @@ public sealed class TickProcessor(
         try
         {
             var result = await agentBrain.ThinkAsync(agent.Id, worldContext, ct);
+            var reactionText = BuildReactionText(result.Action);
             var assistantMessage = new AgentMessage
             {
                 Id = Guid.NewGuid(),
@@ -108,7 +118,7 @@ public sealed class TickProcessor(
                 UserId = agent.UserId,
                 ThreadId = agent.ThreadId,
                 Role = "assistant",
-                Content = result.Action,
+                Content = reactionText,
                 CreatedAt = DateTimeOffset.UtcNow,
                 CorrelationId = correlationId
             };
@@ -118,7 +128,20 @@ public sealed class TickProcessor(
             agent.LastActiveAt = DateTimeOffset.UtcNow;
             await dbContext.SaveChangesAsync(ct);
 
-            var reactionText = BuildReactionText(result.Action);
+            try
+            {
+                await memoryService.StoreMemoryAsync(
+                    agent.Id,
+                    relatedAgentId: null,
+                    description: $"Input: {incomingCommand.Text ?? "(empty)"} | Output: {reactionText}",
+                    importance: 0.58f,
+                    cancellationToken: ct);
+            }
+            catch (Exception memoryError)
+            {
+                logger.LogDebug(memoryError, "Failed to persist conversational memory for agent {AgentId}.", agent.Id);
+            }
+
             var reactionPayload = JsonSerializer.SerializeToElement(new
             {
                 agentId = agent.Id,
@@ -192,6 +215,102 @@ public sealed class TickProcessor(
                     UserId = agent.UserId,
                     Stage = "completed",
                     Message = "Tick command completed.",
+                    Percent = 100
+                },
+                correlationId,
+                ct);
+
+            await notifier.NotifyAgentsListUpdatedAsync(
+                agent.UserId,
+                await GetActiveAgentsAsync(dbContext, agent.UserId, ct),
+                correlationId,
+                ct);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+        {
+            logger.LogWarning(
+                ex,
+                "Authorization failure while processing agent {AgentId}. Using fallback response.",
+                agent.Id);
+
+            var fallbackText = $"{agent.Name} продолжает работу в ограниченном режиме: внешний LLM временно недоступен (403/401).";
+            var fallbackMessage = new AgentMessage
+            {
+                Id = Guid.NewGuid(),
+                AgentId = agent.Id,
+                UserId = agent.UserId,
+                ThreadId = agent.ThreadId,
+                Role = "assistant",
+                Content = fallbackText,
+                CreatedAt = DateTimeOffset.UtcNow,
+                CorrelationId = correlationId
+            };
+
+            dbContext.AgentMessages.Add(fallbackMessage);
+            agent.Status = AgentStatuses.Idle;
+            agent.LastActiveAt = DateTimeOffset.UtcNow;
+            await dbContext.SaveChangesAsync(ct);
+
+            var fallbackPayload = JsonSerializer.SerializeToElement(new
+            {
+                agentId = agent.Id,
+                agentName = agent.Name,
+                text = fallbackText,
+                message = fallbackText,
+                sourceMessage = incomingCommand.Text,
+                sourceCommand = incomingCommand.Command,
+                gameTime = worldTime.GameTime.ToString("O"),
+                correlationId
+            });
+
+            try
+            {
+                await eventService.CreateAsync(
+                    new CreateEventRequestDto
+                    {
+                        Type = "agent.message",
+                        Payload = fallbackPayload,
+                        OccurredAt = fallbackMessage.CreatedAt
+                    },
+                    agent.UserId,
+                    fallbackMessage.CreatedAt,
+                    ct);
+            }
+            catch (Exception eventWriteError)
+            {
+                logger.LogWarning(
+                    eventWriteError,
+                    "Failed to persist fallback event for agent {AgentId}, correlation {CorrelationId}.",
+                    agent.Id,
+                    correlationId);
+            }
+
+            await notifier.NotifyAgentMessageAsync(
+                agent.UserId,
+                ToMessageDto(fallbackMessage),
+                correlationId,
+                ct);
+
+            await notifier.NotifyAgentStatusChangedAsync(
+                agent.UserId,
+                new AgentStatusDto
+                {
+                    AgentId = agent.Id,
+                    UserId = agent.UserId,
+                    Status = agent.Status,
+                    Timestamp = DateTimeOffset.UtcNow
+                },
+                correlationId,
+                ct);
+
+            await notifier.NotifyAgentProgressAsync(
+                agent.UserId,
+                new AgentProgressDto
+                {
+                    AgentId = agent.Id,
+                    UserId = agent.UserId,
+                    Stage = "fallback",
+                    Message = "Agent completed command in degraded mode.",
                     Percent = 100
                 },
                 correlationId,
@@ -280,8 +399,11 @@ public sealed class TickProcessor(
     private string BuildWorldContext(Agent agent, IncomingCommand incomingCommand, DateTimeOffset gameTime)
     {
         var sourceText = string.IsNullOrWhiteSpace(incomingCommand.Text) ? "(empty)" : incomingCommand.Text;
+        var commandPart = string.IsNullOrWhiteSpace(incomingCommand.Command)
+            ? string.Empty
+            : $" Command: {incomingCommand.Command}.";
         var sourcePrefix = incomingCommand.IsWorldUpdate ? "Incoming world event" : "Last user message";
-        var context = $"Simulation time: {gameTime:yyyy-MM-dd HH:mm:ss}. Agent state: {agent.State}. Emotion: {agent.CurrentEmotion}. {sourcePrefix}: {sourceText}";
+        var context = $"Simulation time: {gameTime:yyyy-MM-dd HH:mm:ss}. Agent state: {agent.State}. Emotion: {agent.CurrentEmotion}.{commandPart} {sourcePrefix}: {sourceText}";
         if (context.Length <= _config.WorldContextMaxLength)
         {
             return context;
@@ -307,8 +429,27 @@ public sealed class TickProcessor(
             return new IncomingCommand(Command: null, Text: null, IsWorldUpdate: false);
         }
 
-        var command = lines[0];
-        var text = lines.Length > 1 ? string.Join(" ", lines.Skip(1)) : command;
+        if (lines.Length == 1)
+        {
+            var onlyLine = lines[0];
+            if (!LooksLikeCommandToken(onlyLine))
+            {
+                return new IncomingCommand(Command: null, Text: onlyLine, IsWorldUpdate: false);
+            }
+
+            var isSingleWorldUpdate = string.Equals(onlyLine, "world.update", StringComparison.OrdinalIgnoreCase);
+            return new IncomingCommand(onlyLine, onlyLine, isSingleWorldUpdate);
+        }
+
+        var command = LooksLikeCommandToken(lines[0]) ? lines[0] : null;
+        var text = command is null
+            ? string.Join(" ", lines)
+            : string.Join(" ", lines.Skip(1));
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            text = command;
+        }
+
         var isWorldUpdate = string.Equals(command, "world.update", StringComparison.OrdinalIgnoreCase);
         return new IncomingCommand(command, text, isWorldUpdate);
     }
@@ -317,26 +458,83 @@ public sealed class TickProcessor(
     {
         if (string.IsNullOrWhiteSpace(rawAction))
         {
-            return "Агент обработал событие.";
+            return "Agent processed the request.";
         }
 
         var lines = rawAction.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var line in lines)
         {
-            if (!line.StartsWith("ActionText:", StringComparison.OrdinalIgnoreCase))
+            var normalized = NormalizeLine(line);
+            if (!normalized.StartsWith("ActionText", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var extracted = line["ActionText:".Length..].Trim();
+            var separator = normalized.IndexOf(':');
+            var extracted = separator >= 0
+                ? normalized[(separator + 1)..].Trim()
+                : normalized["ActionText".Length..].Trim();
+            extracted = CleanupGeneratedText(extracted);
             if (!string.IsNullOrWhiteSpace(extracted))
             {
                 return extracted.Length <= 220 ? extracted : $"{extracted[..217]}...";
             }
         }
 
-        var compact = rawAction.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        var meaningfulLines = lines
+            .Select(NormalizeLine)
+            .Where(line =>
+                !line.StartsWith("ActionName", StringComparison.OrdinalIgnoreCase) &&
+                !line.StartsWith("ActionText", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var source = meaningfulLines.Length > 0
+            ? string.Join(" ", meaningfulLines)
+            : rawAction;
+        var compact = CleanupGeneratedText(source);
         return compact.Length <= 220 ? compact : $"{compact[..217]}...";
+    }
+
+    private static bool LooksLikeCommandToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        var normalized = token.Trim().ToLowerInvariant();
+        if (normalized.Length > 120 || normalized.Contains(' '))
+        {
+            return false;
+        }
+
+        return normalized == "world.update" ||
+               normalized.StartsWith("chat.", StringComparison.Ordinal) ||
+               normalized.StartsWith("action.", StringComparison.Ordinal) ||
+               normalized.StartsWith("custom.", StringComparison.Ordinal) ||
+               normalized.StartsWith("ui.", StringComparison.Ordinal) ||
+               normalized.StartsWith("system.", StringComparison.Ordinal);
+    }
+
+    private static string NormalizeLine(string line)
+        => line.Trim().Trim('*', '-', ' ');
+
+    private static string CleanupGeneratedText(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var cleaned = value
+            .Replace("**", " ")
+            .Replace('�', '"')
+            .Replace('�', '"')
+            .Trim()
+            .Trim('"', '\'');
+
+        cleaned = Regex.Replace(cleaned, "\\s+", " ").Trim();
+        return cleaned;
     }
 
     private static AgentMessageDto ToMessageDto(AgentMessage message)
@@ -388,3 +586,4 @@ public sealed class TickProcessor(
 
     private sealed record IncomingCommand(string? Command, string? Text, bool IsWorldUpdate);
 }
+

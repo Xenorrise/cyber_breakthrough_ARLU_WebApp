@@ -6,19 +6,18 @@ using System.Text.Json;
 
 namespace LongLifeModels.Services;
 
-// Файл: LLM-сжатие памяти при переполнении.
 public sealed class MemoryCompressor(
     AgentDbContext dbContext,
     MemoryService memoryService,
     ILLMService llmService,
     IVectorStore vectorStore,
     IOptions<MemoryCompressionOptions> compressionOptions,
-    IOptions<QdrantOptions> qdrantOptions)
+    IOptions<QdrantOptions> qdrantOptions,
+    ILogger<MemoryCompressor> logger)
 {
     private readonly MemoryCompressionOptions _compression = compressionOptions.Value;
     private readonly string _collection = qdrantOptions.Value.CollectionName;
 
-    // Сжимает старые/низкоприоритетные записи при необходимости.
     public async Task<bool> CompressIfNeededAsync(
         Guid agentId,
         int estimatedContextTokens,
@@ -54,10 +53,19 @@ public sealed class MemoryCompressor(
             m.RelatedAgentId
         }));
 
-        var summary = await llmService.GenerateAsync(
-            "Ты подсистема сжатия памяти автономных агентов.",
-            AgentPrompts.BuildMemorySummarizationPrompt(memoryChunkJson),
-            cancellationToken);
+        string summary;
+        try
+        {
+            summary = await llmService.GenerateAsync(
+                "You are a memory compression subsystem for autonomous agents.",
+                AgentPrompts.BuildMemorySummarizationPrompt(memoryChunkJson),
+                cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Skipping memory compression because LLM is unavailable.");
+            return false;
+        }
 
         var relatedAgentId = candidates
             .GroupBy(x => x.RelatedAgentId)
@@ -77,7 +85,14 @@ public sealed class MemoryCompressor(
 
         foreach (var memory in candidates)
         {
-            await vectorStore.DeleteAsync(_collection, memory.Id.ToString(), cancellationToken);
+            try
+            {
+                await vectorStore.DeleteAsync(_collection, memory.Id.ToString(), cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogWarning(ex, "Skipping vector delete for memory {MemoryId}.", memory.Id);
+            }
         }
 
         return true;

@@ -37,7 +37,17 @@ public sealed class MemoryService(
         dbContext.MemoryLogs.Add(memory);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var embedding = await embeddingService.EmbedAsync(memory.Description, cancellationToken);
+        IReadOnlyList<float> embedding;
+        try
+        {
+            embedding = await embeddingService.EmbedAsync(memory.Description, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Skipping vector upsert because embedding service is unavailable.");
+            return memory;
+        }
+
         try
         {
             await vectorStore.UpsertAsync(
@@ -70,7 +80,17 @@ public sealed class MemoryService(
         int topK = 5,
         CancellationToken cancellationToken = default)
     {
-        var queryVector = await embeddingService.EmbedAsync(semanticQuery, cancellationToken);
+        IReadOnlyList<float> queryVector;
+        try
+        {
+            queryVector = await embeddingService.EmbedAsync(semanticQuery, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Skipping vector recall because embedding service is unavailable.");
+            return Array.Empty<MemoryLog>();
+        }
+
         IReadOnlyList<VectorSearchResult> vectorMatches;
         try
         {

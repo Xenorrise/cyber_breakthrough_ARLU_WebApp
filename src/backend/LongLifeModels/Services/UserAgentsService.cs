@@ -253,7 +253,7 @@ public sealed class UserAgentsService(
             AgentId = agent.Id,
             UserId = userId,
             ThreadId = agent.ThreadId,
-            Role = "user",
+            Role = ResolveMessageRole(request.Command),
             Content = messageText,
             CreatedAt = DateTimeOffset.UtcNow,
             CorrelationId = correlationId
@@ -406,14 +406,29 @@ public sealed class UserAgentsService(
 
     private static string BuildCommandText(CommandAgentRequestDto request)
     {
-        var pieces = new[]
-        {
-            request.Command?.Trim(),
-            request.Message?.Trim()
-        };
+        var command = request.Command?.Trim();
+        var message = request.Message?.Trim();
 
-        return string.Join(Environment.NewLine, pieces.Where(x => !string.IsNullOrWhiteSpace(x)));
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return command ?? string.Empty;
+        }
+
+        if (IsSystemCommand(command))
+        {
+            return string.IsNullOrWhiteSpace(command)
+                ? message
+                : $"{command}{Environment.NewLine}{message}";
+        }
+
+        return message;
     }
+
+    private static string ResolveMessageRole(string? command)
+        => IsSystemCommand(command) ? "system" : "user";
+
+    private static bool IsSystemCommand(string? command)
+        => string.Equals(command?.Trim(), "world.update", StringComparison.OrdinalIgnoreCase);
 
     private static string BuildNextState(string currentState, CommandAgentRequestDto request)
     {
