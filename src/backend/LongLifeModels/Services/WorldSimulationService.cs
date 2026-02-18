@@ -130,6 +130,34 @@ public sealed class WorldSimulationService(
         }
     }
 
+    public async Task<WorldTimeDto> RestartWorldAsync(string userId, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeUserId(userId);
+        await EnsureUserWorldAsync(normalized, cancellationToken);
+        var state = States[normalized];
+        await state.Gate.WaitAsync(cancellationToken);
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+
+            await ClearUserWorldDataUnsafeAsync(db, normalized, cancellationToken);
+            await eventService.ClearAsync(normalized, cancellationToken);
+
+            state.Random = CreateRandomForUser(normalized);
+            state.GameTime = DefaultWorldStart;
+            state.Speed = 1f;
+            state.NextEventAt = state.GameTime.AddMinutes(8 + state.Random.Next(16));
+
+            await SeedWorldUnsafeAsync(db, normalized, state.GameTime, cancellationToken);
+            return new WorldTimeDto { GameTime = state.GameTime, Speed = state.Speed };
+        }
+        finally
+        {
+            state.Gate.Release();
+        }
+    }
+
     public async Task TickAsync(TimeSpan elapsedRealTime, CancellationToken cancellationToken)
     {
         if (elapsedRealTime <= TimeSpan.Zero)
@@ -224,6 +252,80 @@ public sealed class WorldSimulationService(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task ClearUserWorldDataUnsafeAsync(AgentDbContext db, string userId, CancellationToken cancellationToken)
+    {
+        var agents = await db.Agents.Where(x => x.UserId == userId).ToListAsync(cancellationToken);
+        var agentIds = agents.Select(x => x.Id).ToHashSet();
+
+        var messages = await db.AgentMessages
+            .Where(x => x.UserId == userId || agentIds.Contains(x.AgentId))
+            .ToListAsync(cancellationToken);
+
+        var conversations = agentIds.Count == 0
+            ? []
+            : await db.Conversations
+                .Where(x => agentIds.Contains(x.InitiatorAgentId) || agentIds.Contains(x.TargetAgentId))
+                .ToListAsync(cancellationToken);
+
+        var interactions = agentIds.Count == 0
+            ? []
+            : await db.Interactions
+                .Where(x => agentIds.Contains(x.InitiatorAgentId) || agentIds.Contains(x.TargetAgentId))
+                .ToListAsync(cancellationToken);
+
+        var relationships = agentIds.Count == 0
+            ? []
+            : await db.Relationships
+                .Where(x => agentIds.Contains(x.AgentAId) || agentIds.Contains(x.AgentBId))
+                .ToListAsync(cancellationToken);
+
+        var memoryLogs = agentIds.Count == 0
+            ? []
+            : await db.MemoryLogs
+                .Where(x => agentIds.Contains(x.AgentId) || (x.RelatedAgentId.HasValue && agentIds.Contains(x.RelatedAgentId.Value)))
+                .ToListAsync(cancellationToken);
+
+        if (messages.Count > 0)
+        {
+            db.AgentMessages.RemoveRange(messages);
+        }
+
+        if (conversations.Count > 0)
+        {
+            db.Conversations.RemoveRange(conversations);
+        }
+
+        if (interactions.Count > 0)
+        {
+            db.Interactions.RemoveRange(interactions);
+        }
+
+        if (relationships.Count > 0)
+        {
+            db.Relationships.RemoveRange(relationships);
+        }
+
+        if (memoryLogs.Count > 0)
+        {
+            db.MemoryLogs.RemoveRange(memoryLogs);
+        }
+
+        if (agents.Count > 0)
+        {
+            db.Agents.RemoveRange(agents);
+        }
+
+        if (messages.Count > 0 ||
+            conversations.Count > 0 ||
+            interactions.Count > 0 ||
+            relationships.Count > 0 ||
+            memoryLogs.Count > 0 ||
+            agents.Count > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private async Task SimulateUntilUnsafeAsync(string userId, UserWorldState state, DateTimeOffset targetTime, CancellationToken cancellationToken)
@@ -640,14 +742,15 @@ public sealed class WorldSimulationService(
 
     private static (Guid A, Guid B) OrderPair(Guid left, Guid right) => left.CompareTo(right) <= 0 ? (left, right) : (right, left);
     private static string NormalizeUserId(string userId) => string.IsNullOrWhiteSpace(userId) ? "demo-user" : userId.Trim();
-    private static UserWorldState CreateState(string userId) => new() { GameTime = DefaultWorldStart, Speed = 1f, NextEventAt = DefaultWorldStart.AddMinutes(8), Random = new Random(Math.Abs(StringComparer.Ordinal.GetHashCode(NormalizeUserId(userId)))) };
+    private static Random CreateRandomForUser(string userId) => new(Math.Abs(StringComparer.Ordinal.GetHashCode(NormalizeUserId(userId))));
+    private static UserWorldState CreateState(string userId) => new() { GameTime = DefaultWorldStart, Speed = 1f, NextEventAt = DefaultWorldStart.AddMinutes(8), Random = CreateRandomForUser(userId) };
 
     private sealed class UserWorldState
     {
         public required DateTimeOffset GameTime { get; set; }
         public required float Speed { get; set; }
         public required DateTimeOffset NextEventAt { get; set; }
-        public required Random Random { get; init; }
+        public required Random Random { get; set; }
         public SemaphoreSlim Gate { get; } = new(1, 1);
     }
 

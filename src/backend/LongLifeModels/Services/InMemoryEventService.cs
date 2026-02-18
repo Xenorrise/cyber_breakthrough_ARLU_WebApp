@@ -76,6 +76,29 @@ public sealed class InMemoryEventService(
         return Task.FromResult(model is null ? null : ToDto(model));
     }
 
+    public async Task ClearAsync(string? userId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var normalizedUserId = string.IsNullOrWhiteSpace(userId) ? null : userId.Trim();
+        lock (_sync)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                _events.Clear();
+            }
+            else
+            {
+                _events.RemoveAll(e => string.Equals(e.UserId, normalizedUserId, StringComparison.Ordinal));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedUserId))
+        {
+            await NotifyEventsClearedAsync(normalizedUserId, cancellationToken);
+        }
+    }
+
     private static EventDto ToDto(EventModel model)
     {
         return new EventDto
@@ -107,6 +130,28 @@ public sealed class InMemoryEventService(
         catch (Exception ex)
         {
             logger.LogDebug(ex, "Failed to push realtime event update for user {UserId}.", userId);
+        }
+    }
+
+    private async Task NotifyEventsClearedAsync(string userId, CancellationToken cancellationToken)
+    {
+        var envelope = new RealtimeEnvelopeDto<object>
+        {
+            Type = AgentHubContracts.Events.EventsUpdated,
+            Timestamp = DateTimeOffset.UtcNow,
+            CorrelationId = null,
+            Payload = new { userId, cleared = true }
+        };
+
+        try
+        {
+            await hubContext.Clients
+                .Group(AgentHubContracts.Groups.User(userId))
+                .SendAsync(AgentHubContracts.Events.EventsUpdated, envelope, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to push realtime event clear update for user {UserId}.", userId);
         }
     }
 }

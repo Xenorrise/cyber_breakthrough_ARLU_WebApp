@@ -8,5 +8,6 @@ public interface IWorldSimulationService
     Task<WorldTimeDto> GetWorldTimeAsync(string userId, CancellationToken cancellationToken);
     Task<WorldTimeDto> UpdateSpeedAsync(string userId, float speed, CancellationToken cancellationToken);
     Task<WorldTimeDto> AdvanceTimeAsync(string userId, int minutes, CancellationToken cancellationToken);
+    Task<WorldTimeDto> RestartWorldAsync(string userId, CancellationToken cancellationToken);
     Task TickAsync(TimeSpan elapsedRealTime, CancellationToken cancellationToken);
 }

@@ -825,5 +825,20 @@ export async function advanceWorldTime(minutes: number): Promise<WorldTime | nul
   }
 }
 
+export async function resetWorldSimulation(): Promise<WorldTime | null> {
+  try {
+    const updated = await backendRequest<BackendWorldTimeDto>("/api/world/time/reset", {
+      method: "POST",
+    })
+    return {
+      gameTime: updated.gameTime,
+      speed: updated.speed,
+    }
+  } catch (error) {
+    console.warn("[data] resetWorldSimulation failed", error)
+    return null
+  }
+}
+
 
 

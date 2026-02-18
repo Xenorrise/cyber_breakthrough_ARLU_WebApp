@@ -21,6 +21,7 @@ export function CyberFrame({
   onAddEvent,
   timeSpeed = 1,
   onTimeSpeedChange,
+  onRestartSimulation,
   worldTime,
 }: {
   children: React.ReactNode
@@ -29,6 +30,7 @@ export function CyberFrame({
   onAddEvent?: (text: string) => void
   timeSpeed?: number
   onTimeSpeedChange?: (speed: number) => void
+  onRestartSimulation?: () => void
   worldTime?: string | null
 }) {
   const [time, setTime] = useState("--:--:--")
@@ -242,20 +244,38 @@ export function CyberFrame({
                 LONG LIVE MODELS
               </h1>
               <div className="flex flex-col items-start gap-1">
-                <button
-                  onClick={handleTogglePause}
-                  className="font-mono text-[10px] md:text-xs tracking-wider uppercase cursor-pointer"
-                  style={{
-                    color: isPaused ? "#4ade80" : "#f87171",
-                    border: `1px solid ${isPaused ? "rgba(74,222,128,0.45)" : "rgba(248,113,113,0.45)"}`,
-                    backgroundColor: isPaused ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)",
-                    padding: "2px 8px",
-                    transition: "all 0.2s ease",
-                  }}
-                  title={isPaused ? "Продолжить течение игрового времени" : "Остановить течение игрового времени"}
-                >
-                  {isPaused ? "ПРОДОЛЖИТЬ ВРЕМЯ" : "ОСТАНОВИТЬ ВРЕМЯ"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleTogglePause}
+                    className="font-mono text-[10px] md:text-xs tracking-wider uppercase cursor-pointer"
+                    style={{
+                      color: isPaused ? "#4ade80" : "#f87171",
+                      border: `1px solid ${isPaused ? "rgba(74,222,128,0.45)" : "rgba(248,113,113,0.45)"}`,
+                      backgroundColor: isPaused ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)",
+                      padding: "2px 8px",
+                      transition: "all 0.2s ease",
+                    }}
+                    title={isPaused ? "Продолжить течение игрового времени" : "Остановить течение игрового времени"}
+                  >
+                    {isPaused ? "ПРОДОЛЖИТЬ ВРЕМЯ" : "ОСТАНОВИТЬ ВРЕМЯ"}
+                  </button>
+
+                  <button
+                    onClick={onRestartSimulation}
+                    disabled={!onRestartSimulation}
+                    className="font-mono text-[10px] md:text-xs tracking-wider uppercase cursor-pointer disabled:cursor-not-allowed"
+                    style={{
+                      color: !onRestartSimulation ? "var(--muted-foreground)" : "var(--cyber-glow)",
+                      border: "1px solid rgba(229,195,75,0.35)",
+                      backgroundColor: !onRestartSimulation ? "rgba(229,195,75,0.03)" : "rgba(229,195,75,0.1)",
+                      padding: "2px 8px",
+                      transition: "all 0.2s ease",
+                    }}
+                    title="Полностью сбросить мир и начать симуляцию заново"
+                  >
+                    НАЧАТЬ ЗАНОВО
+                  </button>
+                </div>
 
                 <span
                   className="font-mono text-xs md:text-sm tabular-nums whitespace-nowrap"

@@ -42,6 +42,15 @@ public sealed class WorldTimeController(
         return Ok(result);
     }
 
+    [HttpPost("reset")]
+    [ProducesResponseType(typeof(WorldTimeDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<WorldTimeDto>> Reset(CancellationToken cancellationToken)
+    {
+        var userId = ResolveUserId();
+        var result = await worldSimulationService.RestartWorldAsync(userId, cancellationToken);
+        return Ok(result);
+    }
+
     private string ResolveUserId()
     {
         try

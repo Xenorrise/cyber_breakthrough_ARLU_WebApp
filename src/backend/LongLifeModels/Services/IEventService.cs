@@ -11,4 +11,5 @@ public interface IEventService
         CancellationToken cancellationToken);
     Task<IReadOnlyCollection<EventDto>> GetAllAsync(string? userId, CancellationToken cancellationToken);
     Task<EventDto?> GetByIdAsync(Guid id, string? userId, CancellationToken cancellationToken);
+    Task ClearAsync(string? userId, CancellationToken cancellationToken);
 }

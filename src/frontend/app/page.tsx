@@ -7,7 +7,7 @@ import { EventsPanel } from "@/components/panels/events-panel"
 import { AgentsPanel } from "@/components/panels/agents-panel"
 import { StatsPanel } from "@/components/panels/stats-panel"
 import { MessagesPanel } from "@/components/panels/messages-panel"
-import { addEvent, getWorldTime, setWorldTimeSpeed } from "@/lib/data"
+import { addEvent, getWorldTime, resetWorldSimulation, setWorldTimeSpeed } from "@/lib/data"
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("graph")
   const [timeSpeed, setTimeSpeed] = useState(1)
@@ -72,6 +72,26 @@ export default function Home() {
     setRefreshToken((prev) => prev + 1)
   }
 
+  const handleRestartSimulation = async () => {
+    const confirmed = window.confirm(
+      "Начать симуляцию заново? Текущие агенты, связи и события будут сброшены."
+    )
+    if (!confirmed) {
+      return
+    }
+
+    const restarted = await resetWorldSimulation()
+    if (!restarted) {
+      return
+    }
+
+    setTimeSpeed(restarted.speed)
+    setWorldTime(restarted.gameTime)
+    setSelectedAgentId(null)
+    setSourceTab(null)
+    setRefreshToken((prev) => prev + 1)
+  }
+
   const handleSelectAgentFromGraph = (agentId: string) => {
     setSelectedAgentId(agentId)
     setSourceTab("graph")
@@ -123,6 +143,7 @@ export default function Home() {
       onAddEvent={handleAddEvent}
       timeSpeed={timeSpeed}
       onTimeSpeedChange={handleTimeSpeedChange}
+      onRestartSimulation={handleRestartSimulation}
       worldTime={worldTime}
     >
       {renderContent()}
